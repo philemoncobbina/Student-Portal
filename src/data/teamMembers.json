@@ -1,0 +1,34 @@
+[
+  {
+    "id": "1",
+    "name": "Rakabuming Suhu",
+    "role": "Founder, CTO",
+    "imgSrc": "https://images.pexels.com/photos/2182970/pexels-photo-2182970.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1",
+    "desc1": "As the Chief Digital Officer of MSC Mediterranean Shipping Company, the second largest container carrier in the world, my team and I are responsible for implementing and developing the complex data flow between the company’s headquarters and our agencies around the globe as well as steering our business towards the digital future of the shipping and logistics sector.",
+    "desc2": "In my role, I am focused on innovation and digitization with a strong focus on improving industry standards while exploring how technology can help create truly differentiated services. I believe that digital collaboration is vital to the evolution of the container shipping industry, and I see enormous potential in digitizing the supply chain and building collaboration around common standards. Rather than technology for technology’s sake, I am always more interested in how technology can improve efficiency, reduce costs, and create better services for our customers. I am currently working closely on some exciting developments around harnessing the potential of the Internet of Things to respond to our customers’ growing interest in smart containers, which enable shippers to monitor their cargo more visibly. The deployment of blockchain technologies in our industry is also a major pillar of my work currently. I am closely involved with MSC’s e-business activities and from 2000 to 2014, I also served as a director of the world’s largest multi-carrier e-commerce network for the ocean shipping industry"
+  },
+  {
+    "id": "2",
+    "name": "Jake Aduhai",
+    "role": "Founder, CTO",
+    "imgSrc": "https://images.pexels.com/photos/6953568/pexels-photo-6953568.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1",
+    "desc1": "As the largest container carrier in the world, my team and I are responsible for implementing and developing the complex data flow between the company’s headquarters and our agencies around the globe as well as steering our business towards the digital future of the shipping and logistics sector.",
+    "desc2": "In my role, I am focused on innovation and digitization with a strong focus on improving industry standards while exploring how technology can help create truly differentiated services. I believe that digital collaboration is vital to the evolution of the container shipping industry, and I see enormous potential in digitizing the supply chain and building collaboration around common standards. Rather than technology for technology’s sake, I am always more interested in how technology can improve efficiency, reduce costs, and create better services for our customers. I am currently working closely on some exciting developments around harnessing the potential of the Internet of Things to respond to our customers’ growing interest in smart containers, which enable shippers to monitor their cargo more visibly. The deployment of blockchain technologies in our industry is also a major pillar of my work currently. I am closely involved with MSC’s e-business activities and from 2000 to 2014, I also served as a director of the world’s largest multi-carrier e-commerce network for the ocean shipping industry"
+  },
+  {
+    "id": "3",
+    "name": "Azalea Perumahan",
+    "role": "Founder, CTO",
+    "imgSrc": "https://images.pexels.com/photos/5325071/pexels-photo-5325071.jpeg?auto=compress&cs=tinysrgb&w=600",
+    "desc1": "As the container carrier in the world, my team and I are responsible for implementing and developing the complex data flow between the company’s headquarters and our agencies around the globe as well as steering our business towards the digital future of the shipping and logistics sector.",
+    "desc2": "In my role, I am focused on innovation and digitization with a strong focus on improving industry standards while exploring how technology can help create truly differentiated services. I believe that digital collaboration is vital to the evolution of the container shipping industry, and I see enormous potential in digitizing the supply chain and building collaboration around common standards. Rather than technology for technology’s sake, I am always more interested in how technology can improve efficiency, reduce costs, and create better services for our customers. I am currently working closely on some exciting developments around harnessing the potential of the Internet of Things to respond to our customers’ growing interest in smart containers, which enable shippers to monitor their cargo more visibly. The deployment of blockchain technologies in our industry is also a major pillar of my work currently. I am closely involved with MSC’s e-business activities and from 2000 to 2014, I also served as a director of the world’s largest multi-carrier e-commerce network for the ocean shipping industry, "
+  },
+  {
+    "id": "4",
+    "name": "Gatot Bambang",
+    "role": "Founder, CTO",
+    "imgSrc": "https://images.pexels.com/photos/5668774/pexels-photo-5668774.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1",
+    "desc1": "My team and I are responsible for implementing and developing the complex data flow between the company’s headquarters and our agencies around the globe as well as steering our business towards the digital future of the shipping and logistics sector.",
+    "desc2": "In my role, I am focused on innovation and digitization with a strong focus on improving industry standards while exploring how technology can help create truly differentiated services. I believe that digital collaboration is vital to the evolution of the container shipping industry, and I see enormous potential in digitizing the supply chain and building collaboration around common standards. Rather than technology for technology’s sake, I am always more interested in how technology can improve efficiency, reduce costs, and create better services for our customers. I am currently working closely on some exciting developments around harnessing the potential of the Internet of Things to respond to our customers’ growing interest in smart containers, which enable shippers to monitor their cargo more visibly. The deployment of blockchain technologies in our industry is also a major pillar of my work currently. I am closely involved with MSC’s e-business activities and from 2000 to 2014, I also served as a director of the world’s largest multi-carrier e-commerce network for the ocean shipping industry"
+  }
+]

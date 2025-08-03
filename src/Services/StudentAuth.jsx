@@ -101,11 +101,7 @@ export const RequireStudentAuth = ({ children }) => {
     return <Navigate to="/" state={{ from: location }} replace />;
   }
 
-  // Check if we couldn't get user data
-  if (!currentUser) {
-    console.log('RequireStudentAuth - No user data available. Redirecting to login.');
-    return <Navigate to="/" state={{ from: location }} replace />;
-  }
+ 
 
   console.log('RequireStudentAuth - User is authenticated, rendering children');
   return children;

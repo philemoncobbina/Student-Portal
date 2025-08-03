@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Eye, EyeOff, X, GraduationCap, Mail, Hash, BookOpen, Users, Calendar, Award, ChevronRight, Star, Shield, Globe, LogOut, User } from 'lucide-react';
+import { Eye, EyeOff, X, GraduationCap, Mail, Hash, BookOpen, Users, Calendar, Award, ChevronRight, Star, Shield, Globe, LogOut, User, Menu } from 'lucide-react';
 import { loginStudent, checkSession, logout } from '../../Services/studentApi';
 import { useNavigate } from 'react-router-dom';
 
@@ -12,6 +12,7 @@ const Home = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
   const [checkingAuth, setCheckingAuth] = useState(true);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const [formData, setFormData] = useState({
     email: '',
@@ -54,12 +55,44 @@ const Home = () => {
     setError('');
   };
 
+  const toggleMobileMenu = () => {
+    setMobileMenuOpen(!mobileMenuOpen);
+  };
+
+  const closeMobileMenu = () => {
+    setMobileMenuOpen(false);
+  };
+
+  const scrollToLogin = (e) => {
+    e.preventDefault();
+    const loginSection = document.querySelector('.login-form-section');
+    if (loginSection) {
+      const navbarHeight = 80;
+      const elementPosition = loginSection.getBoundingClientRect().top;
+      const offsetPosition = elementPosition + window.pageYOffset - navbarHeight;
+
+      window.scrollTo({
+        top: offsetPosition,
+        behavior: 'smooth'
+      });
+    }
+    closeMobileMenu();
+  };
+
   const scrollToFeatures = (e) => {
     e.preventDefault();
     const featuresSection = document.getElementById('features');
     if (featuresSection) {
-      featuresSection.scrollIntoView({ behavior: 'smooth' });
+      const navbarHeight = 80;
+      const elementPosition = featuresSection.getBoundingClientRect().top;
+      const offsetPosition = elementPosition + window.pageYOffset - navbarHeight;
+
+      window.scrollTo({
+        top: offsetPosition,
+        behavior: 'smooth'
+      });
     }
+    closeMobileMenu();
   };
 
   const handleForgotPassword = () => {
@@ -75,6 +108,7 @@ const Home = () => {
       await logout(navigate);
       setIsLoggedIn(false);
       setCurrentUser(null);
+      closeMobileMenu();
     } catch (error) {
       console.error('Logout failed:', error);
     }
@@ -147,7 +181,6 @@ const Home = () => {
     { number: "24/7", label: "Support Available" }
   ];
 
-  // Show loading spinner while checking authentication
   if (checkingAuth) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-800 flex items-center justify-center">
@@ -170,33 +203,116 @@ const Home = () => {
       </div>
 
       {/* Navigation Header - Fixed at the top */}
-      <nav className="fixed top-0 left-0 right-0 z-50 py-4 ">
+      <nav className="fixed top-0 left-0 right-0 z-50 py-4 bg-black/10 backdrop-blur-sm">
         <div className="max-w-7xl mx-auto px-4 flex items-center justify-between">
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 bg-gradient-to-r from-blue-400 to-purple-500 rounded-xl flex items-center justify-center">
+            <a 
+              href="https://plvcmonline.uk" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="w-10 h-10 bg-gradient-to-r from-blue-400 to-purple-500 rounded-xl flex items-center justify-center hover:opacity-80 transition-opacity"
+            >
               <GraduationCap className="text-white" size={24} />
-            </div>
-            <span className="text-white text-xl font-bold">EduPortal</span>
+            </a>
+            <span className="text-white text-xl font-bold">Student Portal</span>
           </div>
+          
+          {/* Desktop Navigation */}
           <div className="hidden md:flex items-center space-x-8 text-white/80">
             <button onClick={scrollToFeatures} className="hover:text-white transition-colors">Features</button>
             <a href="#about" className="hover:text-white transition-colors">About</a>
             <a href="/support" className="hover:text-white transition-colors">Support</a>
-            {isLoggedIn && (
-              <button 
-                onClick={handleLogout}
-                className="flex items-center space-x-2 hover:text-white transition-colors"
-              >
-                <LogOut size={16} />
-                <span>Logout</span>
-              </button>
-            )}
           </div>
+
+          {/* Mobile Menu Button */}
+          <button
+            onClick={toggleMobileMenu}
+            className="md:hidden text-white p-2 rounded-lg hover:bg-white/10 transition-colors"
+          >
+            {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
+          </button>
         </div>
+
+        {/* Mobile Menu Dropdown */}
+        {mobileMenuOpen && (
+          <div className="md:hidden mt-4 mx-4 bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 shadow-xl">
+            <div className="p-4 space-y-4">
+              <button 
+                onClick={scrollToFeatures} 
+                className="w-full text-left px-4 py-3 text-white/80 hover:text-white hover:bg-white/10 rounded-xl transition-colors flex items-center space-x-3"
+              >
+                <BookOpen size={18} />
+                <span>Features</span>
+              </button>
+              
+              <a 
+                href="#about" 
+                onClick={closeMobileMenu}
+                className="block w-full text-left px-4 py-3 text-white/80 hover:text-white hover:bg-white/10 rounded-xl transition-colors flex items-center space-x-3"
+              >
+                <Users size={18} />
+                <span>About</span>
+              </a>
+              
+              <a 
+                href="/support" 
+                onClick={closeMobileMenu}
+                className="block w-full text-left px-4 py-3 text-white/80 hover:text-white hover:bg-white/10 rounded-xl transition-colors flex items-center space-x-3"
+              >
+                <Shield size={18} />
+                <span>Support</span>
+              </a>
+              
+              {/* Mobile Login/Portal Button - Only show relevant button */}
+              {!isLoggedIn ? (
+                <button 
+                  onClick={scrollToLogin}
+                  className="w-full text-left px-4 py-3 text-white/80 hover:text-white hover:bg-white/10 rounded-xl transition-colors flex items-center space-x-3"
+                >
+                  <User size={18} />
+                  <span>Login</span>
+                </button>
+              ) : (
+                <button 
+                  onClick={() => {
+                    handleGoToPortal();
+                    closeMobileMenu();
+                  }}
+                  className="w-full text-left px-4 py-3 text-white/80 hover:text-white hover:bg-white/10 rounded-xl transition-colors flex items-center space-x-3"
+                >
+                  <GraduationCap size={18} />
+                  <span>Go to Portal</span>
+                </button>
+              )}
+              
+              {/* Mobile Logout - Only show when logged in */}
+              {isLoggedIn && (
+                <>
+                  <div className="border-t border-white/20 my-2"></div>
+                  <button 
+                    onClick={handleLogout}
+                    className="w-full text-left px-4 py-3 text-red-300 hover:text-red-200 hover:bg-red-500/10 rounded-xl transition-colors flex items-center space-x-3"
+                  >
+                    <LogOut size={18} />
+                    <span>Logout</span>
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        )}
       </nav>
 
+      {/* Overlay to close mobile menu when clicking outside */}
+      {mobileMenuOpen && (
+        <div 
+          className="fixed inset-0 bg-black/20 z-40 md:hidden"
+          onClick={closeMobileMenu}
+        ></div>
+      )}
+
       {/* Main Content */}
-      <div style={{ marginTop: '12.4rem' }} className="relative z-10 px-6 py-12">
+      <div className="relative z-10 px-6 py-12 mt-20">
         <div className="max-w-7xl mx-auto">
           <div className="grid lg:grid-cols-2 gap-12 items-center">
 
@@ -208,14 +324,14 @@ const Home = () => {
                   <span>Trusted by thousands of students</span>
                 </div>
 
-                <h1 className="text-5xl lg:text-6xl font-bold leading-tight">
+                <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold leading-tight">
                   Your Gateway to
                   <span className="block bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
                     Academic Success
                   </span>
                 </h1>
 
-                <p className="text-xl text-white/80 leading-relaxed max-w-lg">
+                <p className="text-lg md:text-xl text-white/80 leading-relaxed max-w-lg">
                   Access your courses, track your progress, connect with peers, and unlock your full potential with our comprehensive student portal.
                 </p>
               </div>
@@ -223,13 +339,13 @@ const Home = () => {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
                 {stats.map((stat, index) => (
                   <div key={index} className="text-center">
-                    <div className="text-2xl font-bold text-white">{stat.number}</div>
-                    <div className="text-sm text-white/60">{stat.label}</div>
+                    <div className="text-xl md:text-2xl font-bold text-white">{stat.number}</div>
+                    <div className="text-xs md:text-sm text-white/60">{stat.label}</div>
                   </div>
                 ))}
               </div>
 
-              <div className="flex items-center space-x-6">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center space-y-4 sm:space-y-0 sm:space-x-6">
                 <div className="flex items-center space-x-2">
                   <Shield className="text-green-400" size={20} />
                   <span className="text-sm text-white/80">Secure & Private</span>
@@ -242,7 +358,7 @@ const Home = () => {
             </div>
 
             {/* Right Side - Conditional Content */}
-            <div className="w-full max-w-md mx-auto lg:mx-0">
+            <div className="w-full max-w-md mx-auto lg:mx-0 login-form-section">
               {error && (
                 <div className="bg-red-500/20 backdrop-blur-sm border border-red-400/30 text-red-100 px-4 py-3 rounded-xl mb-6 flex items-center shadow-lg">
                   <span className="flex-grow text-sm">{error}</span>
@@ -254,15 +370,15 @@ const Home = () => {
 
               {isLoggedIn ? (
                 // Welcome Screen for Logged In Users
-                <div className="bg-white/10 backdrop-blur-md rounded-3xl shadow-2xl border border-white/20 p-8">
+                <div className="bg-white/10 backdrop-blur-md rounded-3xl shadow-2xl border border-white/20 p-6 md:p-8">
                   <div className="text-center mb-8">
                     <div className="w-16 h-16 bg-gradient-to-r from-green-400 to-blue-500 rounded-full flex items-center justify-center mx-auto mb-4">
                       <User className="text-white" size={32} />
                     </div>
-                    <h2 className="text-2xl font-bold text-white mb-2">
+                    <h2 className="text-xl md:text-2xl font-bold text-white mb-2">
                       Welcome Back, {currentUser?.first_name || 'Student'}!
                     </h2>
-                    <p className="text-white/70">
+                    <p className="text-sm md:text-base text-white/70">
                       You're already signed in. Ready to continue your academic journey?
                     </p>
                   </div>
@@ -275,7 +391,7 @@ const Home = () => {
                       </div>
                       <div className="flex justify-between text-sm">
                         <span className="text-white/60">Email:</span>
-                        <span className="text-white">{currentUser.email}</span>
+                        <span className="text-white truncate ml-2">{currentUser.email}</span>
                       </div>
                       <div className="flex justify-between text-sm">
                         <span className="text-white/60">Index Number:</span>
@@ -314,10 +430,10 @@ const Home = () => {
                 </div>
               ) : (
                 // Login Form for Non-Logged In Users
-                <div className="bg-white/10 backdrop-blur-md rounded-3xl shadow-2xl border border-white/20 p-8">
+                <div className="bg-white/10 backdrop-blur-md rounded-3xl shadow-2xl border border-white/20 p-6 md:p-8">
                   <div className="text-center mb-8">
-                    <h2 className="text-2xl font-bold text-white mb-2">Welcome Back</h2>
-                    <p className="text-white/70">Sign in to access your dashboard</p>
+                    <h2 className="text-xl md:text-2xl font-bold text-white mb-2">Welcome Back</h2>
+                    <p className="text-sm md:text-base text-white/70">Sign in to access your dashboard</p>
                   </div>
 
                   <form onSubmit={handleSubmit} className="space-y-6">
@@ -422,15 +538,15 @@ const Home = () => {
           </div>
 
           {/* Features Section */}
-          <div id="features" className="mt-24">
+          <div id="features" className="mt-24 scroll-mt-20">
             <div className="text-center mb-16">
-              <h2 className="text-4xl font-bold text-white mb-4">Everything You Need</h2>
-              <p className="text-xl text-white/70 max-w-2xl mx-auto">
+              <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">Everything You Need</h2>
+              <p className="text-lg md:text-xl text-white/70 max-w-2xl mx-auto">
                 Discover powerful tools designed to enhance your learning experience and academic journey.
               </p>
             </div>
 
-            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
+            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6 md:gap-8">
               {features.map((feature, index) => (
                 <div key={index} className="bg-white/10 backdrop-blur-sm rounded-2xl p-6 border border-white/20 hover:bg-white/15 transition-all duration-300 hover:scale-105">
                   <div className="w-12 h-12 bg-gradient-to-r from-blue-400 to-purple-500 rounded-xl flex items-center justify-center mb-4">

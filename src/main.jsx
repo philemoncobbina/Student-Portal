@@ -4,7 +4,7 @@ import { createBrowserRouter, RouterProvider } from 'react-router-dom';
 import { HelmetProvider } from 'react-helmet-async';
 import './index.css';
 import LoginPage from './Pages/LoginPage';
-import ChangePasswordPage from './Pages/ChangePasswordPage';
+
 import ForgetPassword from './Pages/ForgetPassword';
 import SchoolDashboardPage from './Pages/SchoolDashboardPage';
 import RaiseTicketPage from './Pages/RaiseTicketPage';
@@ -52,10 +52,7 @@ const router = createBrowserRouter([
     element: <LoginPage />,
   },
 
-  {
-    path: '/changepassword',
-    element: <ChangePasswordPage />,
-  },
+ 
   {
     path: '/forgetpassword',
     element: <ForgetPassword />,

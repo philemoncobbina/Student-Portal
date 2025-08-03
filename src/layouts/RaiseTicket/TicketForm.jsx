@@ -161,13 +161,13 @@ const TicketForm = () => {
             )}
 
             {/* Navigation Header */}
-            <nav className="fixed top-0 left-0 right-0 z-50 py-4">
+            <nav className="fixed top-0 left-0 right-0 z-50 py-4 bg-black/10 backdrop-blur-sm">
                 <div className="max-w-7xl mx-auto px-4 flex items-center justify-between">
                     <div className="flex items-center space-x-3">
                         <div className="w-10 h-10 bg-gradient-to-r from-blue-400 to-purple-500 rounded-xl flex items-center justify-center">
                             <GraduationCap className="text-white" size={24} />
                         </div>
-                        <span className="text-white text-xl font-bold">EduPortal</span>
+                        <span className="text-white text-xl font-bold">Student Portal</span>
                     </div>
                     <button
                         onClick={handleBackToLogin}

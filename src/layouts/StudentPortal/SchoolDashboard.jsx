@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Book, Calendar, FileText, Compass, Bell, Search, User, LogOut, Menu, X, Settings, Mail, Hash, Shield, CheckCircle, XCircle, Eye, EyeOff, Edit3, Save, AlertCircle } from 'lucide-react';
+import { Book, Calendar, FileText, Compass, Bell, Search, User, LogOut, Menu, X, Settings, Mail, Hash, Shield, CheckCircle, XCircle, Eye, EyeOff, Edit3, Save, AlertCircle, CreditCard } from 'lucide-react';
 
 import { useNavigate } from 'react-router-dom';
 import { getCurrentUser, logout } from '../../Services/studentApi';
@@ -8,6 +8,7 @@ import { BookListService } from '../../Services/BookListService';
 import BookList from './BookList';
 import AccountManagement from './AccountManagement';
 import StudentResults from './StudentResults';
+import StudentBillsPortal from './StudentBillsPortal'; // Import the Bills component
 
 export default function SchoolDashboard() {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -22,6 +23,7 @@ export default function SchoolDashboard() {
     { id: 'booklist', name: 'Book List', icon: <Book size={20} />, color: 'bg-emerald-500' },
     { id: 'timetable', name: 'Time Table', icon: <Calendar size={20} />, color: 'bg-amber-500' },
     { id: 'materials', name: 'Learning Materials', icon: <Compass size={20} />, color: 'bg-rose-500' },
+    { id: 'bills', name: 'Bills', icon: <CreditCard size={20} />, color: 'bg-blue-500' }, // Added Bills tab
     { id: 'account', name: 'Manage Account', icon: <Settings size={20} />, color: 'bg-purple-500' }
   ];
 
@@ -46,7 +48,7 @@ export default function SchoolDashboard() {
       const recentNotifications = [];
       const now = new Date();
       const sevenDaysAgo = new Date(now.getTime() - (7 * 24 * 60 * 60 * 1000));
-  
+
       // Check for recent results
       try {
         const results = await studentResultsService.getCurrentClassResults();
@@ -68,7 +70,7 @@ export default function SchoolDashboard() {
       } catch (error) {
         console.error('Error fetching results for notifications:', error);
       }
-  
+
       // Check for recent booklists
       try {
         const booklistsResponse = await BookListService.getCurrentClassBooklists();
@@ -95,14 +97,14 @@ export default function SchoolDashboard() {
         console.error('Error fetching booklists for notifications:', error);
         console.error('Full error details:', error.response?.data || error.message);
       }
-  
+
       // Sort notifications by most recent first
       recentNotifications.sort((a, b) => {
         const timeA = a.time.includes('hour') || a.time === 'Just now' ? 0 : parseInt(a.time);
         const timeB = b.time.includes('hour') || b.time === 'Just now' ? 0 : parseInt(b.time);
         return timeA - timeB;
       });
-  
+
       setNotifications(recentNotifications);
       setNotificationCount(recentNotifications.length);
     } catch (error) {
@@ -301,7 +303,8 @@ export default function SchoolDashboard() {
                       {tool.id === 'booklist' && 'Access required textbooks'}
                       {tool.id === 'timetable' && 'Check your weekly schedule'}
                       {tool.id === 'materials' && 'Download study resources'}
-                      {tool.id === 'account' && 'Download study resources'}
+                      {tool.id === 'bills' && 'View and pay your school bills'}
+                      {tool.id === 'account' && 'Manage your account settings'}
                     </p>
                   </div>
                 ))}
@@ -336,6 +339,7 @@ export default function SchoolDashboard() {
 
           {activeTab === 'booklist' && <BookList />}
           {activeTab === 'results' && <StudentResults />}
+          {activeTab === 'bills' && <StudentBillsPortal />}
           {activeTab === 'account' && <AccountManagement />}
         </main>
       </div>

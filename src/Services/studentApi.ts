@@ -4,7 +4,7 @@ import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 
 // Base URL for all API requests
-const API_BASE_URL = 'https://api.plvcmonline.uk/api';
+const API_BASE_URL = 'http://localhost:8000/api';
 
 interface LoginResponse {
   access_token: string;

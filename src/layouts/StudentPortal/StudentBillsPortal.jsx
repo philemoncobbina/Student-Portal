@@ -17,7 +17,9 @@ import {
   Trophy,
   ExternalLink,
   PlusCircle,
-  Receipt
+  Receipt,
+  Tag,
+  Percent
 } from 'lucide-react';
 
 import { 
@@ -72,17 +74,14 @@ const StudentBillsPortal = ({ className = '' }) => {
     
     let filteredBills = bills;
     
-    // Filter by status
     if (filterStatus !== 'all') {
       filteredBills = filteredBills.filter(bill => bill.payment_status === filterStatus);
     }
     
-    // Filter by term (for current bills tab)
     if (activeTab === 'current' && filterTerm !== 'all') {
       filteredBills = filteredBills.filter(bill => bill.billing_template.term === filterTerm);
     }
     
-    // Filter by class (for all bills tab)
     if (activeTab === 'all' && filterClass !== 'all') {
       filteredBills = filteredBills.filter(bill => bill.billing_template.class_name === filterClass);
     }
@@ -90,7 +89,6 @@ const StudentBillsPortal = ({ className = '' }) => {
     return filteredBills;
   };
 
-  // Get unique terms from current class bills
   const getAvailableTerms = () => {
     const terms = new Set();
     currentClassBills.forEach(bill => {
@@ -101,7 +99,6 @@ const StudentBillsPortal = ({ className = '' }) => {
     return Array.from(terms);
   };
 
-  // Get unique classes from all bills
   const getAvailableClasses = () => {
     const classes = new Set();
     billsData?.bills.forEach(bill => {
@@ -138,10 +135,12 @@ const StudentBillsPortal = ({ className = '' }) => {
   );
 
   const BillCard = ({ bill }) => {
-    const balanceDue = parseFloat(bill.balance_due);
+    // Use current_bill_balance from backend instead of balance_due
+    const balanceDue = parseFloat(bill.current_bill_balance || 0);
     const isOverdue = bill.is_overdue && balanceDue > 0;
     const statusDetails = getStatusDetails(bill.payment_status);
     const StatusIcon = statusDetails.icon;
+    const hasDiscount = parseFloat(bill.discount_amount || 0) > 0;
     
     return (
       <div className="space-y-6">
@@ -224,7 +223,43 @@ const StudentBillsPortal = ({ className = '' }) => {
               />
             </div>
 
-            {/* Custom Charges Summary */}
+            {hasDiscount && (
+              <div className="mb-4 p-4 bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg border border-green-200">
+                <div className="flex items-start justify-between">
+                  <div className="flex items-start gap-3 flex-1">
+                    <div className="p-2 bg-white rounded-lg shadow-sm">
+                      <Tag className="h-5 w-5 text-green-600" />
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-sm font-semibold text-green-800">Discount Applied</span>
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700">
+                          <Percent className="h-3 w-3 mr-1" />
+                          Savings
+                        </span>
+                      </div>
+                      {bill.discount_reason && (
+                        <p className="text-xs text-green-700 mt-1">
+                          <span className="font-medium">Reason:</span> {bill.discount_reason}
+                        </p>
+                      )}
+                      {bill.discount_approved_by && (
+                        <p className="text-xs text-green-600 mt-1">
+                          <span className="font-medium">Approved by:</span> {bill.discount_approved_by}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="text-right ml-4">
+                    <div className="text-xl font-bold text-green-700">
+                      -{formatCurrency(bill.discount_amount)}
+                    </div>
+                    <div className="text-xs text-green-600 mt-1">Discount</div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {bill.custom_charges && bill.custom_charges.length > 0 && (
               <div className="mb-4 p-3 bg-purple-50 rounded-lg border border-purple-200">
                 <div className="flex items-center justify-between">
@@ -239,7 +274,6 @@ const StudentBillsPortal = ({ className = '' }) => {
               </div>
             )}
 
-            {/* Payment Receipts Summary */}
             {bill.payment_receipts && bill.payment_receipts.length > 0 && (
               <div className="mb-4 p-3 bg-green-50 rounded-lg border border-green-200">
                 <div className="flex items-center justify-between">
@@ -323,9 +357,11 @@ const StudentBillsPortal = ({ className = '' }) => {
   const BillDetailsModal = () => {
     if (!selectedBill) return null;
 
-    const balanceDue = parseFloat(selectedBill.balance_due);
+    // Use current_bill_balance from backend
+    const balanceDue = parseFloat(selectedBill.current_bill_balance || 0);
     const isCredit = balanceDue < 0;
     const isOverdue = selectedBill.is_overdue && balanceDue > 0;
+    const hasDiscount = parseFloat(selectedBill.discount_amount || 0) > 0;
 
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -386,7 +422,46 @@ const StudentBillsPortal = ({ className = '' }) => {
               </div>
             )}
 
-            {/* Billing Items Section */}
+            {hasDiscount && (
+              <div className="mb-6">
+                <h3 className="text-sm font-medium text-gray-900 mb-3 flex items-center">
+                  <Tag className="w-4 h-4 mr-2 text-green-600" />
+                  Discount Information
+                  <span className="ml-2 text-xs bg-green-100 text-green-600 px-2 py-1 rounded-full">
+                    Active
+                  </span>
+                </h3>
+                <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg p-4 border border-green-200">
+                  <div className="flex justify-between items-start mb-3">
+                    <div>
+                      <p className="text-sm font-medium text-green-900">Discount Amount</p>
+                      <p className="text-2xl font-bold text-green-700 mt-1">
+                        -{formatCurrency(selectedBill.discount_amount)}
+                      </p>
+                    </div>
+                    <div className="px-3 py-1 bg-green-100 rounded-full">
+                      <Percent className="h-4 w-4 text-green-700" />
+                    </div>
+                  </div>
+                  
+                  {selectedBill.discount_reason && (
+                    <div className="mb-3 p-3 bg-white rounded-md border border-green-100">
+                      <p className="text-xs font-medium text-gray-700 mb-1">Reason for Discount</p>
+                      <p className="text-sm text-gray-900">{selectedBill.discount_reason}</p>
+                    </div>
+                  )}
+                  
+                  {selectedBill.discount_approved_by && (
+                    <div className="flex items-center text-xs text-green-700">
+                      <User className="h-3 w-3 mr-1" />
+                      <span className="font-medium">Approved by:</span>
+                      <span className="ml-1">{selectedBill.discount_approved_by}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {selectedBill.billing_template.billing_items && selectedBill.billing_template.billing_items.length > 0 && (
               <div className="mb-6">
                 <h3 className="text-sm font-medium text-gray-900 mb-3 flex items-center">
@@ -415,7 +490,6 @@ const StudentBillsPortal = ({ className = '' }) => {
               </div>
             )}
 
-            {/* Custom Charges Section */}
             {selectedBill.custom_charges && selectedBill.custom_charges.length > 0 && (
               <div className="mb-6">
                 <h3 className="text-sm font-medium text-gray-900 mb-3 flex items-center">
@@ -446,7 +520,6 @@ const StudentBillsPortal = ({ className = '' }) => {
               </div>
             )}
 
-            {/* Payment Receipts Section */}
             {selectedBill.payment_receipts && selectedBill.payment_receipts.length > 0 && (
               <div className="mb-6">
                 <h3 className="text-sm font-medium text-gray-900 mb-3 flex items-center">
@@ -480,7 +553,6 @@ const StudentBillsPortal = ({ className = '' }) => {
               </div>
             )}
 
-            {/* Summary Section */}
             <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
               <h3 className="text-sm font-medium text-gray-900 mb-3">Bill Summary</h3>
               <div className="space-y-2">
@@ -488,7 +560,7 @@ const StudentBillsPortal = ({ className = '' }) => {
                   <span className="text-gray-600">Previous Arrears:</span>
                   <span className="font-medium">{formatCurrency(selectedBill.previous_arrears)}</span>
                 </div>
-                {parseFloat(selectedBill.discount_amount) > 0 && (
+                {hasDiscount && (
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">Discount:</span>
                     <span className="font-medium text-green-600">-{formatCurrency(selectedBill.discount_amount)}</span>
@@ -603,7 +675,6 @@ const StudentBillsPortal = ({ className = '' }) => {
           </div>
           
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-            {/* Status Filter */}
             <div className="flex items-center space-x-2">
               <span className="text-sm text-slate-600 whitespace-nowrap">Status:</span>
               <select 
@@ -619,7 +690,6 @@ const StudentBillsPortal = ({ className = '' }) => {
               </select>
             </div>
 
-            {/* Term Filter (only for current tab) */}
             {isCurrentTab && getAvailableTerms().length > 0 && (
               <div className="flex items-center space-x-2">
                 <span className="text-sm text-slate-600 whitespace-nowrap">Term:</span>
@@ -638,7 +708,6 @@ const StudentBillsPortal = ({ className = '' }) => {
               </div>
             )}
 
-            {/* Class Filter (only for all bills tab) */}
             {!isCurrentTab && getAvailableClasses().length > 0 && (
               <div className="flex items-center space-x-2">
                 <span className="text-sm text-slate-600 whitespace-nowrap">Class:</span>

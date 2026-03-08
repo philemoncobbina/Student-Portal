@@ -61,7 +61,7 @@ class StudentResultsService {
   private readonly baseURL: string;
   private readonly apiClient;
 
-  constructor(baseURL: string = 'https://api.plvcmonline.uk/api') {
+  constructor(baseURL: string = 'http://127.0.0.1:8000/api') {
     this.baseURL = baseURL;
     this.apiClient = axios.create({
       baseURL: this.baseURL,

@@ -1,10 +1,10 @@
 import axios from 'axios';
 
-const API_URL = 'https://api.plvcmonline.uk/api'; // Base URL for Django backend
+const API_URL = 'http://127.0.0.1:8000/api'; // Base URL for Django backend
 
 // Function to request a verification code
 export const requestVerificationCode = (email) => {
-    return axios.post(`${API_URL}/password-reset/`, { email });
+    return axios.post(`${API_URL}/student/password-reset/`, { email });
 };
 
 // Function to verify the verification code

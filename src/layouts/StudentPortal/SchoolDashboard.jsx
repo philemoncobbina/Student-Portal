@@ -1,5 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Book, Calendar, FileText, Compass, Bell, Search, User, LogOut, Menu, X, Settings, Mail, Hash, Shield, CheckCircle, XCircle, Eye, EyeOff, Edit3, Save, AlertCircle, CreditCard } from 'lucide-react';
+import {
+  Book, Calendar, FileText, Compass, Bell, Search, User, LogOut,
+  Menu, X, Settings, Mail, Hash, Shield, CheckCircle, XCircle,
+  Eye, EyeOff, Edit3, Save, AlertCircle, CreditCard, GraduationCap
+} from 'lucide-react';
 
 import { useNavigate } from 'react-router-dom';
 import { getCurrentUser, logout } from '../../Services/studentApi';
@@ -8,7 +12,8 @@ import { BookListService } from '../../Services/BookListService';
 import BookList from './BookList';
 import AccountManagement from './AccountManagement';
 import StudentResults from './StudentResults';
-import StudentBillsPortal from './StudentBillsPortal'; // Import the Bills component
+import StudentBillsPortal from './StudentBillsPortal';
+import StudentCourses from './StudentCourses';
 
 export default function SchoolDashboard() {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -19,12 +24,13 @@ export default function SchoolDashboard() {
   const navigate = useNavigate();
 
   const tools = [
-    { id: 'results', name: 'Results', icon: <FileText size={20} />, color: 'bg-indigo-500' },
-    { id: 'booklist', name: 'Book List', icon: <Book size={20} />, color: 'bg-emerald-500' },
-    { id: 'timetable', name: 'Time Table', icon: <Calendar size={20} />, color: 'bg-amber-500' },
-    { id: 'materials', name: 'Learning Materials', icon: <Compass size={20} />, color: 'bg-rose-500' },
-    { id: 'bills', name: 'Bills', icon: <CreditCard size={20} />, color: 'bg-blue-500' }, // Added Bills tab
-    { id: 'account', name: 'Manage Account', icon: <Settings size={20} />, color: 'bg-purple-500' }
+    { id: 'results',   name: 'Results',           icon: <FileText size={20} />,      color: 'bg-indigo-500',  description: 'View your academic performance' },
+    { id: 'courses',   name: 'My Courses',         icon: <GraduationCap size={20} />, color: 'bg-teal-500',    description: 'View your assigned courses & teachers' },
+    { id: 'booklist',  name: 'Book List',           icon: <Book size={20} />,          color: 'bg-emerald-500', description: 'Access required textbooks' },
+    { id: 'timetable', name: 'Time Table',          icon: <Calendar size={20} />,      color: 'bg-amber-500',   description: 'Check your weekly schedule' },
+    { id: 'materials', name: 'Learning Materials',  icon: <Compass size={20} />,       color: 'bg-rose-500',    description: 'Download study resources' },
+    { id: 'bills',     name: 'Bills',               icon: <CreditCard size={20} />,    color: 'bg-blue-500',    description: 'View and pay your school bills' },
+    { id: 'account',   name: 'Manage Account',      icon: <Settings size={20} />,      color: 'bg-purple-500',  description: 'Manage your account settings' },
   ];
 
   // Helper function to calculate time ago
@@ -75,7 +81,7 @@ export default function SchoolDashboard() {
       try {
         const booklistsResponse = await BookListService.getCurrentClassBooklists();
         const booklists = booklistsResponse.data;
-        
+
         if (booklists && Array.isArray(booklists)) {
           booklists.forEach(booklist => {
             if (booklist.publish_date) {
@@ -135,7 +141,7 @@ export default function SchoolDashboard() {
 
     // Check for notifications every 5 minutes
     const notificationInterval = setInterval(checkRecentNotifications, 5 * 60 * 1000);
-    
+
     return () => clearInterval(notificationInterval);
   }, [navigate]);
 
@@ -145,7 +151,7 @@ export default function SchoolDashboard() {
 
   const handleTabChange = (tabId) => {
     setActiveTab(tabId);
-    setIsMobileMenuOpen(false); // Close mobile menu when tab changes
+    setIsMobileMenuOpen(false);
   };
 
   const toggleMobileMenu = () => {
@@ -156,7 +162,7 @@ export default function SchoolDashboard() {
     <div className="flex h-screen bg-gray-50 text-gray-800">
       {/* Mobile Menu Overlay */}
       {isMobileMenuOpen && (
-        <div 
+        <div
           className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"
           onClick={() => setIsMobileMenuOpen(false)}
         />
@@ -182,11 +188,11 @@ export default function SchoolDashboard() {
         <div className="p-4 border-b border-gray-200">
           <h1 className="text-xl font-bold text-indigo-700">Campus Learn</h1>
         </div>
-        
-        <nav className="flex-1 p-4">
+
+        <nav className="flex-1 p-4 overflow-y-auto">
           <ul className="space-y-1">
             <li>
-              <button 
+              <button
                 className={`flex items-center w-full p-3 rounded-lg text-left transition-colors ${
                   activeTab === 'dashboard' ? 'bg-indigo-50 text-indigo-700' : 'hover:bg-gray-100'
                 }`}
@@ -198,7 +204,7 @@ export default function SchoolDashboard() {
             </li>
             {tools.map(tool => (
               <li key={tool.id}>
-                <button 
+                <button
                   className={`flex items-center w-full p-3 rounded-lg text-left transition-colors ${
                     activeTab === tool.id ? 'bg-indigo-50 text-indigo-700' : 'hover:bg-gray-100'
                   }`}
@@ -211,7 +217,7 @@ export default function SchoolDashboard() {
             ))}
           </ul>
         </nav>
-        
+
         <div className="p-4 border-t border-gray-200">
           <div className="flex items-center justify-between">
             <div className="flex items-center min-w-0 flex-1">
@@ -223,7 +229,7 @@ export default function SchoolDashboard() {
                 <p className="text-xs text-gray-500 truncate">{userData.class_name || 'Loading...'}</p>
               </div>
             </div>
-            <button 
+            <button
               onClick={handleLogout}
               className="p-2 text-gray-500 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors flex-shrink-0 ml-2"
               title="Logout"
@@ -233,7 +239,7 @@ export default function SchoolDashboard() {
           </div>
         </div>
       </div>
-      
+
       {/* Main content */}
       <div className="flex-1 flex flex-col overflow-hidden lg:ml-0">
         {/* Header */}
@@ -249,23 +255,23 @@ export default function SchoolDashboard() {
               </button>
               <h2 className="text-lg font-semibold">Student Dashboard</h2>
             </div>
-            
+
             <div className="flex items-center space-x-2 sm:space-x-4">
               {/* Search - hidden on very small screens */}
               <div className="relative hidden sm:block">
                 <Search size={18} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-                <input 
-                  type="text" 
-                  placeholder="Search..." 
+                <input
+                  type="text"
+                  placeholder="Search..."
                   className="pl-10 pr-4 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent w-32 sm:w-48"
                 />
               </div>
-              
+
               {/* Mobile search button */}
               <button className="sm:hidden p-2 rounded-full hover:bg-gray-100">
                 <Search size={18} />
               </button>
-              
+
               <button className="p-2 rounded-full hover:bg-gray-100 relative">
                 <Bell size={20} />
                 {notificationCount > 0 && (
@@ -277,7 +283,7 @@ export default function SchoolDashboard() {
             </div>
           </div>
         </header>
-        
+
         {/* Dashboard content */}
         <main className="flex-1 overflow-auto p-3 sm:p-6 bg-gray-50">
           {activeTab === 'dashboard' && (
@@ -285,11 +291,11 @@ export default function SchoolDashboard() {
               <h2 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6">
                 Welcome Back, {userData.first_name || 'Student'}!
               </h2>
-              
+
               {/* Tools Grid */}
               <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 sm:gap-6 mb-6 sm:mb-8">
                 {tools.map(tool => (
-                  <div 
+                  <div
                     key={tool.id}
                     className="bg-white rounded-xl shadow-sm p-4 sm:p-6 border border-gray-100 hover:shadow-md transition-shadow cursor-pointer"
                     onClick={() => handleTabChange(tool.id)}
@@ -298,24 +304,17 @@ export default function SchoolDashboard() {
                       {tool.icon}
                     </div>
                     <h3 className="font-semibold text-base sm:text-lg mb-1">{tool.name}</h3>
-                    <p className="text-gray-500 text-xs sm:text-sm">
-                      {tool.id === 'results' && 'View your academic performance'}
-                      {tool.id === 'booklist' && 'Access required textbooks'}
-                      {tool.id === 'timetable' && 'Check your weekly schedule'}
-                      {tool.id === 'materials' && 'Download study resources'}
-                      {tool.id === 'bills' && 'View and pay your school bills'}
-                      {tool.id === 'account' && 'Manage your account settings'}
-                    </p>
+                    <p className="text-gray-500 text-xs sm:text-sm">{tool.description}</p>
                   </div>
                 ))}
               </div>
-              
+
               {/* Recent Activity */}
               <div className="bg-white rounded-xl shadow-sm p-4 sm:p-6 border border-gray-100">
                 <h3 className="font-semibold text-base sm:text-lg mb-4">Recent Activity</h3>
                 <div className="space-y-3 sm:space-y-4">
                   {notifications.length > 0 ? (
-                    notifications.map((notification, index) => (
+                    notifications.map((notification) => (
                       <div key={notification.id} className="flex items-start p-3 hover:bg-gray-50 rounded-lg">
                         <div className="bg-gray-100 rounded-full p-2 mr-3 flex-shrink-0">
                           {notification.icon}
@@ -337,10 +336,11 @@ export default function SchoolDashboard() {
             </>
           )}
 
-          {activeTab === 'booklist' && <BookList />}
-          {activeTab === 'results' && <StudentResults />}
-          {activeTab === 'bills' && <StudentBillsPortal />}
-          {activeTab === 'account' && <AccountManagement />}
+          {activeTab === 'courses'   && <StudentCourses />}
+          {activeTab === 'booklist'  && <BookList />}
+          {activeTab === 'results'   && <StudentResults />}
+          {activeTab === 'bills'     && <StudentBillsPortal />}
+          {activeTab === 'account'   && <AccountManagement />}
         </main>
       </div>
     </div>

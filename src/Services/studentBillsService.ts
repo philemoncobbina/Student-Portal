@@ -31,7 +31,10 @@ api.interceptors.request.use(
   }
 );
 
-// TypeScript interfaces based on your actual API response
+// ---------------------------------------------------------------------------
+// TypeScript interfaces
+// ---------------------------------------------------------------------------
+
 export interface BillingItem {
   id: number;
   billing_template: number;
@@ -65,7 +68,11 @@ export interface CustomCharge {
 
 export interface PaymentReceipt {
   id: number;
-  // Add receipt fields as needed based on your API
+  receipt_number: string;
+  amount_paid: string;
+  payment_date: string;
+  payment_method: string;
+  notes?: string;
   [key: string]: any;
 }
 
@@ -89,6 +96,8 @@ export interface StudentBill {
   last_name: string;
   previous_arrears: string;
   discount_amount: string;
+  discount_reason?: string;
+  discount_approved_by?: string;
   status: 'DRAFT' | 'SCHEDULED' | 'PUBLISHED';
   payment_status: 'pending' | 'partial' | 'paid' | 'overdue';
   generated_date: string;
@@ -106,6 +115,7 @@ export interface StudentBill {
   logs: StudentBillLog[];
   current_bill_balance: number;
   total_outstanding: number;
+  pdf_url?: string;
 }
 
 export interface StudentBillsResponse {
@@ -121,123 +131,258 @@ export interface StudentBillsResponse {
   bills: StudentBill[];
 }
 
-// API Service Class
+// ---------------------------------------------------------------------------
+// Payment Receipt Request interfaces
+// ---------------------------------------------------------------------------
+
+export type PaymentReceiptRequestStatus =
+  | 'pending'
+  | 'under_review'
+  | 'rejected'
+  | 'accepted';
+
+export type PaymentMethodType =
+  | 'cash'
+  | 'bank_transfer'
+  | 'mobile_money'
+  | 'cheque'
+  | 'other';
+
+export interface PaymentReceiptRequestLog {
+  id: number;
+  action: string;
+  old_status: string;
+  new_status: string;
+  comment: string;
+  actor_first_name: string;
+  actor_last_name: string;
+  actor_email: string;
+  timestamp: string;
+}
+
+export interface PaymentReceiptRequest {
+  id: number;
+  student_bill: number;               // FK id
+  student_bill_detail?: StudentBill;  // may be nested depending on serializer
+  submitted_by: number;
+  amount: string;
+  payment_method: PaymentMethodType;
+  payment_reference: string;
+  proof_of_payment: string;           // URL returned from API
+  status: PaymentReceiptRequestStatus;
+  reviewed_by?: number | null;
+  review_comment?: string | null;
+  reviewed_at?: string | null;
+  generated_receipt?: PaymentReceipt | null;
+  submitted_at: string;
+  updated_at: string;
+  logs?: PaymentReceiptRequestLog[];
+}
+
+/** Payload sent when a student submits a new payment request (multipart/form-data). */
+export interface CreatePaymentReceiptRequestPayload {
+  student_bill: number;
+  amount: number | string;
+  payment_method: PaymentMethodType;
+  payment_reference: string;
+  proof_of_payment: File;
+}
+
+export interface PaymentReceiptRequestsResponse {
+  count?: number;
+  results?: PaymentReceiptRequest[];
+  // The API may return a plain array depending on pagination settings
+  [key: string]: any;
+}
+
+// ---------------------------------------------------------------------------
+// Main Student Bills Service
+// ---------------------------------------------------------------------------
 export class StudentBillsService {
-  /**
-   * Get all bills for the authenticated student with summary
-   */
+  /** Get all bills for the authenticated student with summary */
   static async getAllBills(): Promise<StudentBillsResponse> {
     const response: AxiosResponse<StudentBillsResponse> = await api.get('/my-bills/', {
-      headers: getAuthHeaders()
+      headers: getAuthHeaders(),
     });
     return response.data;
   }
 
-  /**
-   * Get bills for student's current class only
-   */
+  /** Get bills for student's current class only */
   static async getCurrentClassBills(): Promise<StudentBill[]> {
     const response: AxiosResponse<StudentBill[]> = await api.get('/my-bills/current-class/', {
-      headers: getAuthHeaders()
+      headers: getAuthHeaders(),
     });
     return response.data;
   }
 
-  /**
-   * Get bills from student's previous classes
-   */
+  /** Get bills from student's previous classes */
   static async getPreviousClassBills(): Promise<StudentBill[]> {
     const response: AxiosResponse<StudentBill[]> = await api.get('/billing/my-bills/previous-classes/', {
-      headers: getAuthHeaders()
+      headers: getAuthHeaders(),
     });
     return response.data;
   }
 
-  /**
-   * Get logs for a specific bill
-   */
+  /** Get logs for a specific bill */
   static async getBillLogs(billId: number): Promise<StudentBillLog[]> {
     const response: AxiosResponse<StudentBillLog[]> = await api.get(`/billing/bills/${billId}/logs/`, {
-      headers: getAuthHeaders()
+      headers: getAuthHeaders(),
     });
     return response.data;
   }
 
-  /**
-   * Get a specific bill details
-   */
+  /** Get a specific bill details */
   static async getBillDetails(billId: number): Promise<StudentBill> {
     const response: AxiosResponse<StudentBill> = await api.get(`/billing/bills/${billId}/`, {
-      headers: getAuthHeaders()
+      headers: getAuthHeaders(),
     });
     return response.data;
   }
 
-  /**
-   * Download bill as PDF
-   */
+  /** Download bill as PDF */
   static async downloadBillPDF(billId: number): Promise<Blob> {
     const response: AxiosResponse<Blob> = await api.get(`/billing/bills/${billId}/download/`, {
       headers: getAuthHeaders(),
-      responseType: 'blob'
+      responseType: 'blob',
     });
     return response.data;
   }
 
-  /**
-   * Make a payment for a bill
-   */
+  /** Make a payment for a bill */
   static async makePayment(billId: number, amount: number, paymentMethod: string): Promise<any> {
-    const response: AxiosResponse<any> = await api.post(`/billing/bills/${billId}/payment/`, {
-      amount,
-      payment_method: paymentMethod
-    }, {
-      headers: getAuthHeaders()
-    });
+    const response: AxiosResponse<any> = await api.post(
+      `/billing/bills/${billId}/payment/`,
+      { amount, payment_method: paymentMethod },
+      { headers: getAuthHeaders() }
+    );
     return response.data;
   }
 
-  /**
-   * Get custom charges for a specific bill
-   */
+  /** Get custom charges for a specific bill */
   static async getCustomCharges(billId: number): Promise<CustomCharge[]> {
-    const response: AxiosResponse<CustomCharge[]> = await api.get(`/billing/bills/${billId}/custom-charges/`, {
-      headers: getAuthHeaders()
-    });
+    const response: AxiosResponse<CustomCharge[]> = await api.get(
+      `/billing/bills/${billId}/custom-charges/`,
+      { headers: getAuthHeaders() }
+    );
     return response.data;
   }
 
-  /**
-   * Add a custom charge to a bill
-   */
-  static async addCustomCharge(billId: number, chargeData: Omit<CustomCharge, 'id' | 'created_date'>): Promise<CustomCharge> {
-    const response: AxiosResponse<CustomCharge> = await api.post(`/billing/bills/${billId}/custom-charges/`, chargeData, {
-      headers: getAuthHeaders()
-    });
+  /** Add a custom charge to a bill */
+  static async addCustomCharge(
+    billId: number,
+    chargeData: Omit<CustomCharge, 'id' | 'created_date'>
+  ): Promise<CustomCharge> {
+    const response: AxiosResponse<CustomCharge> = await api.post(
+      `/billing/bills/${billId}/custom-charges/`,
+      chargeData,
+      { headers: getAuthHeaders() }
+    );
     return response.data;
   }
 
-  /**
-   * Update a custom charge
-   */
-  static async updateCustomCharge(billId: number, chargeId: number, chargeData: Partial<CustomCharge>): Promise<CustomCharge> {
-    const response: AxiosResponse<CustomCharge> = await api.patch(`/billing/bills/${billId}/custom-charges/${chargeId}/`, chargeData, {
-      headers: getAuthHeaders()
-    });
+  /** Update a custom charge */
+  static async updateCustomCharge(
+    billId: number,
+    chargeId: number,
+    chargeData: Partial<CustomCharge>
+  ): Promise<CustomCharge> {
+    const response: AxiosResponse<CustomCharge> = await api.patch(
+      `/billing/bills/${billId}/custom-charges/${chargeId}/`,
+      chargeData,
+      { headers: getAuthHeaders() }
+    );
     return response.data;
   }
 
-  /**
-   * Delete a custom charge
-   */
+  /** Delete a custom charge */
   static async deleteCustomCharge(billId: number, chargeId: number): Promise<void> {
     await api.delete(`/billing/bills/${billId}/custom-charges/${chargeId}/`, {
-      headers: getAuthHeaders()
+      headers: getAuthHeaders(),
     });
   }
 }
 
+// ---------------------------------------------------------------------------
+// Payment Receipt Request Service
+// ---------------------------------------------------------------------------
+export class PaymentReceiptRequestService {
+  /**
+   * Submit a new payment receipt request (multipart/form-data for file upload).
+   * Maps to: POST /api/receipt-requests/
+   */
+  static async submitRequest(
+    payload: CreatePaymentReceiptRequestPayload
+  ): Promise<{ success: boolean; message: string; data: PaymentReceiptRequest }> {
+    const formData = new FormData();
+    formData.append('student_bill', String(payload.student_bill));
+    formData.append('amount', String(payload.amount));
+    formData.append('payment_method', payload.payment_method);
+    formData.append('payment_reference', payload.payment_reference);
+    formData.append('phone_number', payload.phone_number);
+    formData.append('proof_of_payment', payload.proof_of_payment);
+
+    const response = await api.post('/receipt-requests/', formData, {
+      headers: {
+        ...getAuthHeaders(),
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  }
+
+  /**
+   * List all payment receipt requests for the authenticated student.
+   * Optionally filter by status.
+   * Maps to: GET /api/receipt-requests/?status=<status>
+   */
+  static async listRequests(
+    status?: PaymentReceiptRequestStatus
+  ): Promise<PaymentReceiptRequest[]> {
+    const params: Record<string, string> = {};
+    if (status) params.status = status;
+
+    const response: AxiosResponse<PaymentReceiptRequest[] | PaymentReceiptRequestsResponse> =
+      await api.get('/receipt-requests/', {
+        headers: getAuthHeaders(),
+        params,
+      });
+
+    // Handle both paginated { results: [...] } and plain array responses
+    const data = response.data;
+    if (Array.isArray(data)) return data;
+    if (data.results && Array.isArray(data.results)) return data.results;
+    return [];
+  }
+
+  /**
+   * Retrieve a single payment receipt request by ID.
+   * Maps to: GET /api/receipt-requests/<pk>/
+   */
+  static async getRequest(requestId: number): Promise<PaymentReceiptRequest> {
+    const response: AxiosResponse<PaymentReceiptRequest> = await api.get(
+      `/receipt-requests/${requestId}/`,
+      { headers: getAuthHeaders() }
+    );
+    return response.data;
+  }
+
+  /**
+   * Retrieve the audit log for a specific receipt request.
+   * Maps to: GET /api/receipt-requests/<request_id>/logs/
+   */
+  static async getRequestLogs(requestId: number): Promise<PaymentReceiptRequestLog[]> {
+    const response: AxiosResponse<PaymentReceiptRequestLog[]> = await api.get(
+      `/receipt-requests/${requestId}/logs/`,
+      { headers: getAuthHeaders() }
+    );
+    return response.data;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Utility functions
+// ---------------------------------------------------------------------------
+
 export const formatCurrency = (amount: string | number): string => {
   const numAmount = typeof amount === 'string' ? parseFloat(amount) : amount;
   return new Intl.NumberFormat('en-GH', {
@@ -278,27 +423,26 @@ export const getPaymentStatusColor = (status: string): string => {
 
 export const getTermDisplay = (term: string): string => {
   const termMap: { [key: string]: string } = {
-    'first': 'First Term',
-    'second': 'Second Term',
-    'third': 'Third Term',
+    first: 'First Term',
+    second: 'Second Term',
+    third: 'Third Term',
   };
   return termMap[term] || term;
 };
 
 export const getCategoryColor = (category: string): string => {
   const categoryColors: { [key: string]: string } = {
-    'TUITION': 'bg-blue-100 text-blue-800 border-blue-200',
-    'TUTION': 'bg-blue-100 text-blue-800 border-blue-200',
+    TUITION: 'bg-blue-100 text-blue-800 border-blue-200',
+    TUTION: 'bg-blue-100 text-blue-800 border-blue-200',
     'ELECTRIC BILL': 'bg-yellow-100 text-yellow-800 border-yellow-200',
-    'FACILITIES': 'bg-purple-100 text-purple-800 border-purple-200',
-    'ACTIVITIES': 'bg-green-100 text-green-800 border-green-200',
-    'LIBRARY': 'bg-indigo-100 text-indigo-800 border-indigo-200',
-    'TRANSPORT': 'bg-orange-100 text-orange-800 border-orange-200',
-    'MEALS': 'bg-pink-100 text-pink-800 border-pink-200',
-    'UNIFORM': 'bg-gray-100 text-gray-800 border-gray-200',
-    'BOOKS': 'bg-cyan-100 text-cyan-800 border-cyan-200',
+    FACILITIES: 'bg-purple-100 text-purple-800 border-purple-200',
+    ACTIVITIES: 'bg-green-100 text-green-800 border-green-200',
+    LIBRARY: 'bg-indigo-100 text-indigo-800 border-indigo-200',
+    TRANSPORT: 'bg-orange-100 text-orange-800 border-orange-200',
+    MEALS: 'bg-pink-100 text-pink-800 border-pink-200',
+    UNIFORM: 'bg-gray-100 text-gray-800 border-gray-200',
+    BOOKS: 'bg-cyan-100 text-cyan-800 border-cyan-200',
   };
-  
   return categoryColors[category.toUpperCase()] || 'bg-gray-100 text-gray-800 border-gray-200';
 };
 
@@ -312,11 +456,14 @@ export const calculateCustomChargesTotal = (customCharges: CustomCharge[]): numb
   return customCharges.reduce((total, charge) => total + parseFloat(charge.amount), 0);
 };
 
-export const calculateTotalBillAmount = (billingItems: BillingItem[], customCharges: CustomCharge[], previousArrears: string = "0"): number => {
+export const calculateTotalBillAmount = (
+  billingItems: BillingItem[],
+  customCharges: CustomCharge[],
+  previousArrears: string = '0'
+): number => {
   const itemsTotal = calculateItemsTotal(billingItems);
   const customChargesTotal = calculateCustomChargesTotal(customCharges);
   const previousArrearsTotal = parseFloat(previousArrears) || 0;
-  
   return itemsTotal + customChargesTotal + previousArrearsTotal;
 };
 
@@ -331,11 +478,12 @@ export const getDaysUntilDue = (dueDateString: string): number => {
   const dueDate = new Date(dueDateString);
   const today = new Date();
   const diffTime = dueDate.getTime() - today.getTime();
-  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-  return diffDays;
+  return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 };
 
-export const getDueDateStatus = (dueDateString: string): 'overdue' | 'due-soon' | 'upcoming' => {
+export const getDueDateStatus = (
+  dueDateString: string
+): 'overdue' | 'due-soon' | 'upcoming' => {
   const daysUntilDue = getDaysUntilDue(dueDateString);
   if (daysUntilDue < 0) return 'overdue';
   if (daysUntilDue <= 7) return 'due-soon';
@@ -354,14 +502,37 @@ export const getCustomChargeColor = (index: number): string => {
 };
 
 export const formatCustomChargeLog = (log: StudentBillLog): string => {
-  if (log.field_name === 'custom_charge_added') {
-    return `Added custom charge: ${log.new_value}`;
-  } else if (log.field_name === 'custom_charge_updated') {
+  if (log.field_name === 'custom_charge_added') return `Added custom charge: ${log.new_value}`;
+  if (log.field_name === 'custom_charge_updated')
     return `Updated custom charge: ${log.old_value} → ${log.new_value}`;
-  } else if (log.field_name === 'custom_charge_removed') {
-    return `Removed custom charge: ${log.old_value}`;
-  }
+  if (log.field_name === 'custom_charge_removed') return `Removed custom charge: ${log.old_value}`;
   return `${log.field_name}: ${log.old_value || ''} → ${log.new_value || ''}`;
+};
+
+/** Human-readable label for a receipt request status */
+export const getReceiptRequestStatusLabel = (
+  status: PaymentReceiptRequestStatus
+): string => {
+  const labels: Record<PaymentReceiptRequestStatus, string> = {
+    pending: 'Pending',
+    under_review: 'Under Review',
+    rejected: 'Rejected',
+    accepted: 'Accepted',
+  };
+  return labels[status] ?? status;
+};
+
+/** Tailwind classes for a receipt request status badge */
+export const getReceiptRequestStatusClasses = (
+  status: PaymentReceiptRequestStatus
+): string => {
+  const map: Record<PaymentReceiptRequestStatus, string> = {
+    pending: 'bg-slate-100 text-slate-700',
+    under_review: 'bg-amber-100 text-amber-700',
+    rejected: 'bg-red-100 text-red-700',
+    accepted: 'bg-emerald-100 text-emerald-700',
+  };
+  return map[status] ?? 'bg-slate-100 text-slate-700';
 };
 
 export default StudentBillsService;

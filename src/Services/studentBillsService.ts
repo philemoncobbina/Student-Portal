@@ -2,7 +2,7 @@
 import axios, { AxiosResponse } from 'axios';
 
 // Base API configuration
-const API_BASE_URL = 'http://127.0.0.1:8000/api';
+const API_BASE_URL = 'https://api.cobbina.uk/api';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -21,9 +21,11 @@ const getAuthHeaders = () => {
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('access_token');
+
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+
     return config;
   },
   (error) => {
@@ -87,6 +89,15 @@ export interface StudentBillLog {
   timestamp: string;
 }
 
+export type StudentBillStatus = 'DRAFT' | 'SCHEDULED' | 'PUBLISHED';
+
+export type StudentBillPaymentStatus =
+  | 'pending'
+  | 'partial'
+  | 'paid'
+  | 'overpaid'
+  | 'overdue';
+
 export interface StudentBill {
   id: number;
   student: string;
@@ -94,28 +105,44 @@ export interface StudentBill {
   bill_number: string;
   first_name: string;
   last_name: string;
+
   previous_arrears: string;
   discount_amount: string;
-  discount_reason?: string;
-  discount_approved_by?: string;
-  status: 'DRAFT' | 'SCHEDULED' | 'PUBLISHED';
-  payment_status: 'pending' | 'partial' | 'paid' | 'overdue';
+  discount_reason?: string | null;
+  discount_approved_by?: string | null;
+
+  status: StudentBillStatus;
+  payment_status: StudentBillPaymentStatus;
+
   generated_date: string;
   scheduled_date: string | null;
+
+  /**
+   * Exact date/time the bill was published.
+   * This comes from the backend field:
+   * published_at = models.DateTimeField(null=True, blank=True)
+   */
+  published_at: string | null;
+
   due_date: string;
   created_date: string;
   created_by: string;
+
   total_amount_due: string;
   total_paid: string;
-  notes: string;
+  notes: string | null;
+
   balance_due: number;
   is_overdue: boolean;
+
   custom_charges: CustomCharge[];
   payment_receipts: PaymentReceipt[];
   logs: StudentBillLog[];
+
   current_bill_balance: number;
   total_outstanding: number;
-  pdf_url?: string;
+
+  pdf_url?: string | null;
 }
 
 export interface StudentBillsResponse {
@@ -162,13 +189,14 @@ export interface PaymentReceiptRequestLog {
 
 export interface PaymentReceiptRequest {
   id: number;
-  student_bill: number;               // FK id
-  student_bill_detail?: StudentBill;  // may be nested depending on serializer
+  student_bill: number;
+  student_bill_detail?: StudentBill;
   submitted_by: number;
   amount: string;
   payment_method: PaymentMethodType;
   payment_reference: string;
-  proof_of_payment: string;           // URL returned from API
+  phone_number?: string | null;
+  proof_of_payment: string;
   status: PaymentReceiptRequestStatus;
   reviewed_by?: number | null;
   review_comment?: string | null;
@@ -179,31 +207,36 @@ export interface PaymentReceiptRequest {
   logs?: PaymentReceiptRequestLog[];
 }
 
-/** Payload sent when a student submits a new payment request (multipart/form-data). */
+/**
+ * Payload sent when a student submits a new payment request.
+ * This is sent as multipart/form-data because proof_of_payment is a file.
+ */
 export interface CreatePaymentReceiptRequestPayload {
   student_bill: number;
   amount: number | string;
   payment_method: PaymentMethodType;
   payment_reference: string;
+  phone_number?: string;
   proof_of_payment: File;
 }
 
 export interface PaymentReceiptRequestsResponse {
   count?: number;
   results?: PaymentReceiptRequest[];
-  // The API may return a plain array depending on pagination settings
   [key: string]: any;
 }
 
 // ---------------------------------------------------------------------------
 // Main Student Bills Service
 // ---------------------------------------------------------------------------
+
 export class StudentBillsService {
   /** Get all bills for the authenticated student with summary */
   static async getAllBills(): Promise<StudentBillsResponse> {
     const response: AxiosResponse<StudentBillsResponse> = await api.get('/my-bills/', {
       headers: getAuthHeaders(),
     });
+
     return response.data;
   }
 
@@ -212,49 +245,76 @@ export class StudentBillsService {
     const response: AxiosResponse<StudentBill[]> = await api.get('/my-bills/current-class/', {
       headers: getAuthHeaders(),
     });
+
     return response.data;
   }
 
   /** Get bills from student's previous classes */
   static async getPreviousClassBills(): Promise<StudentBill[]> {
-    const response: AxiosResponse<StudentBill[]> = await api.get('/billing/my-bills/previous-classes/', {
-      headers: getAuthHeaders(),
-    });
+    const response: AxiosResponse<StudentBill[]> = await api.get(
+      '/billing/my-bills/previous-classes/',
+      {
+        headers: getAuthHeaders(),
+      }
+    );
+
     return response.data;
   }
 
   /** Get logs for a specific bill */
   static async getBillLogs(billId: number): Promise<StudentBillLog[]> {
-    const response: AxiosResponse<StudentBillLog[]> = await api.get(`/billing/bills/${billId}/logs/`, {
-      headers: getAuthHeaders(),
-    });
+    const response: AxiosResponse<StudentBillLog[]> = await api.get(
+      `/billing/bills/${billId}/logs/`,
+      {
+        headers: getAuthHeaders(),
+      }
+    );
+
     return response.data;
   }
 
   /** Get a specific bill details */
   static async getBillDetails(billId: number): Promise<StudentBill> {
-    const response: AxiosResponse<StudentBill> = await api.get(`/billing/bills/${billId}/`, {
-      headers: getAuthHeaders(),
-    });
+    const response: AxiosResponse<StudentBill> = await api.get(
+      `/billing/bills/${billId}/`,
+      {
+        headers: getAuthHeaders(),
+      }
+    );
+
     return response.data;
   }
 
   /** Download bill as PDF */
   static async downloadBillPDF(billId: number): Promise<Blob> {
-    const response: AxiosResponse<Blob> = await api.get(`/billing/bills/${billId}/download/`, {
-      headers: getAuthHeaders(),
-      responseType: 'blob',
-    });
+    const response: AxiosResponse<Blob> = await api.get(
+      `/billing/bills/${billId}/download/`,
+      {
+        headers: getAuthHeaders(),
+        responseType: 'blob',
+      }
+    );
+
     return response.data;
   }
 
   /** Make a payment for a bill */
-  static async makePayment(billId: number, amount: number, paymentMethod: string): Promise<any> {
+  static async makePayment(
+    billId: number,
+    amount: number,
+    paymentMethod: string
+  ): Promise<any> {
     const response: AxiosResponse<any> = await api.post(
       `/billing/bills/${billId}/payment/`,
-      { amount, payment_method: paymentMethod },
-      { headers: getAuthHeaders() }
+      {
+        amount,
+        payment_method: paymentMethod,
+      },
+      {
+        headers: getAuthHeaders(),
+      }
     );
+
     return response.data;
   }
 
@@ -262,8 +322,11 @@ export class StudentBillsService {
   static async getCustomCharges(billId: number): Promise<CustomCharge[]> {
     const response: AxiosResponse<CustomCharge[]> = await api.get(
       `/billing/bills/${billId}/custom-charges/`,
-      { headers: getAuthHeaders() }
+      {
+        headers: getAuthHeaders(),
+      }
     );
+
     return response.data;
   }
 
@@ -275,8 +338,11 @@ export class StudentBillsService {
     const response: AxiosResponse<CustomCharge> = await api.post(
       `/billing/bills/${billId}/custom-charges/`,
       chargeData,
-      { headers: getAuthHeaders() }
+      {
+        headers: getAuthHeaders(),
+      }
     );
+
     return response.data;
   }
 
@@ -289,13 +355,19 @@ export class StudentBillsService {
     const response: AxiosResponse<CustomCharge> = await api.patch(
       `/billing/bills/${billId}/custom-charges/${chargeId}/`,
       chargeData,
-      { headers: getAuthHeaders() }
+      {
+        headers: getAuthHeaders(),
+      }
     );
+
     return response.data;
   }
 
   /** Delete a custom charge */
-  static async deleteCustomCharge(billId: number, chargeId: number): Promise<void> {
+  static async deleteCustomCharge(
+    billId: number,
+    chargeId: number
+  ): Promise<void> {
     await api.delete(`/billing/bills/${billId}/custom-charges/${chargeId}/`, {
       headers: getAuthHeaders(),
     });
@@ -305,20 +377,29 @@ export class StudentBillsService {
 // ---------------------------------------------------------------------------
 // Payment Receipt Request Service
 // ---------------------------------------------------------------------------
+
 export class PaymentReceiptRequestService {
   /**
-   * Submit a new payment receipt request (multipart/form-data for file upload).
-   * Maps to: POST /api/receipt-requests/
+   * Submit a new payment receipt request.
+   * Uses multipart/form-data for proof_of_payment file upload.
+   *
+   * Maps to:
+   * POST /api/receipt-requests/
    */
   static async submitRequest(
     payload: CreatePaymentReceiptRequestPayload
   ): Promise<{ success: boolean; message: string; data: PaymentReceiptRequest }> {
     const formData = new FormData();
+
     formData.append('student_bill', String(payload.student_bill));
     formData.append('amount', String(payload.amount));
     formData.append('payment_method', payload.payment_method);
     formData.append('payment_reference', payload.payment_reference);
-    formData.append('phone_number', payload.phone_number);
+
+    if (payload.phone_number) {
+      formData.append('phone_number', payload.phone_number);
+    }
+
     formData.append('proof_of_payment', payload.proof_of_payment);
 
     const response = await api.post('/receipt-requests/', formData, {
@@ -327,54 +408,79 @@ export class PaymentReceiptRequestService {
         'Content-Type': 'multipart/form-data',
       },
     });
+
     return response.data;
   }
 
   /**
    * List all payment receipt requests for the authenticated student.
    * Optionally filter by status.
-   * Maps to: GET /api/receipt-requests/?status=<status>
+   *
+   * Maps to:
+   * GET /api/receipt-requests/?status=<status>
    */
   static async listRequests(
     status?: PaymentReceiptRequestStatus
   ): Promise<PaymentReceiptRequest[]> {
     const params: Record<string, string> = {};
-    if (status) params.status = status;
 
-    const response: AxiosResponse<PaymentReceiptRequest[] | PaymentReceiptRequestsResponse> =
-      await api.get('/receipt-requests/', {
-        headers: getAuthHeaders(),
-        params,
-      });
+    if (status) {
+      params.status = status;
+    }
 
-    // Handle both paginated { results: [...] } and plain array responses
+    const response: AxiosResponse<
+      PaymentReceiptRequest[] | PaymentReceiptRequestsResponse
+    > = await api.get('/receipt-requests/', {
+      headers: getAuthHeaders(),
+      params,
+    });
+
     const data = response.data;
-    if (Array.isArray(data)) return data;
-    if (data.results && Array.isArray(data.results)) return data.results;
+
+    if (Array.isArray(data)) {
+      return data;
+    }
+
+    if (data.results && Array.isArray(data.results)) {
+      return data.results;
+    }
+
     return [];
   }
 
   /**
    * Retrieve a single payment receipt request by ID.
-   * Maps to: GET /api/receipt-requests/<pk>/
+   *
+   * Maps to:
+   * GET /api/receipt-requests/<pk>/
    */
   static async getRequest(requestId: number): Promise<PaymentReceiptRequest> {
     const response: AxiosResponse<PaymentReceiptRequest> = await api.get(
       `/receipt-requests/${requestId}/`,
-      { headers: getAuthHeaders() }
+      {
+        headers: getAuthHeaders(),
+      }
     );
+
     return response.data;
   }
 
   /**
    * Retrieve the audit log for a specific receipt request.
-   * Maps to: GET /api/receipt-requests/<request_id>/logs/
+   *
+   * Maps to:
+   * GET /api/receipt-requests/<request_id>/logs/
    */
-  static async getRequestLogs(requestId: number): Promise<PaymentReceiptRequestLog[]> {
+  static async getRequestLogs(
+    requestId: number
+  ): Promise<PaymentReceiptRequestLog[]> {
     const response: AxiosResponse<PaymentReceiptRequestLog[]> = await api.get(
       `/receipt-requests/${requestId}/logs/`,
-      { headers: getAuthHeaders() }
+      {
+        headers: getAuthHeaders(),
+      }
     );
+
     return response.data;
   }
 }
@@ -385,11 +491,12 @@ export class PaymentReceiptRequestService {
 
 export const formatCurrency = (amount: string | number): string => {
   const numAmount = typeof amount === 'string' ? parseFloat(amount) : amount;
+
   return new Intl.NumberFormat('en-GH', {
     style: 'currency',
     currency: 'GHS',
     minimumFractionDigits: 2,
-  }).format(numAmount);
+  }).format(Number.isNaN(numAmount) ? 0 : numAmount);
 };
 
 export const formatDate = (dateString: string): string => {
@@ -408,14 +515,85 @@ export const formatShortDate = (dateString: string): string => {
   });
 };
 
+/**
+ * Format date and time.
+ * Useful for displaying published_at.
+ *
+ * Example output:
+ * 27 June 2026, 18:55
+ */
+export const formatDateTime = (dateString?: string | null): string => {
+  if (!dateString) {
+    return 'Not published yet';
+  }
+
+  return new Date(dateString).toLocaleString('en-GB', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+};
+
+/**
+ * Format only the published date/time.
+ * This is a clearer wrapper for bill published time.
+ */
+export const formatPublishedAt = (publishedAt?: string | null): string => {
+  return formatDateTime(publishedAt);
+};
+
 export const getPaymentStatusColor = (status: string): string => {
   switch (status) {
     case 'paid':
       return 'text-emerald-700 bg-emerald-100 border-emerald-200';
+
     case 'partial':
       return 'text-amber-700 bg-amber-100 border-amber-200';
+
+    case 'overpaid':
+      return 'text-blue-700 bg-blue-100 border-blue-200';
+
     case 'overdue':
       return 'text-red-700 bg-red-100 border-red-200';
+
+    default:
+      return 'text-slate-700 bg-slate-100 border-slate-200';
+  }
+};
+
+export const getPaymentStatusLabel = (status: StudentBillPaymentStatus): string => {
+  const labels: Record<StudentBillPaymentStatus, string> = {
+    pending: 'Pending',
+    partial: 'Partially Paid',
+    paid: 'Fully Paid',
+    overpaid: 'Overpaid / Credit',
+    overdue: 'Overdue',
+  };
+
+  return labels[status] ?? status;
+};
+
+export const getBillStatusLabel = (status: StudentBillStatus): string => {
+  const labels: Record<StudentBillStatus, string> = {
+    DRAFT: 'Draft',
+    SCHEDULED: 'Scheduled',
+    PUBLISHED: 'Published',
+  };
+
+  return labels[status] ?? status;
+};
+
+export const getBillStatusColor = (status: StudentBillStatus): string => {
+  switch (status) {
+    case 'PUBLISHED':
+      return 'text-emerald-700 bg-emerald-100 border-emerald-200';
+
+    case 'SCHEDULED':
+      return 'text-amber-700 bg-amber-100 border-amber-200';
+
+    case 'DRAFT':
     default:
       return 'text-slate-700 bg-slate-100 border-slate-200';
   }
@@ -427,6 +605,7 @@ export const getTermDisplay = (term: string): string => {
     second: 'Second Term',
     third: 'Third Term',
   };
+
   return termMap[term] || term;
 };
 
@@ -443,17 +622,33 @@ export const getCategoryColor = (category: string): string => {
     UNIFORM: 'bg-gray-100 text-gray-800 border-gray-200',
     BOOKS: 'bg-cyan-100 text-cyan-800 border-cyan-200',
   };
-  return categoryColors[category.toUpperCase()] || 'bg-gray-100 text-gray-800 border-gray-200';
+
+  return (
+    categoryColors[category.toUpperCase()] ||
+    'bg-gray-100 text-gray-800 border-gray-200'
+  );
 };
 
 export const calculateItemsTotal = (items: BillingItem[]): number => {
-  if (!items || items.length === 0) return 0;
-  return items.reduce((total, item) => total + parseFloat(item.amount), 0);
+  if (!items || items.length === 0) {
+    return 0;
+  }
+
+  return items.reduce((total, item) => {
+    return total + parseFloat(item.amount || '0');
+  }, 0);
 };
 
-export const calculateCustomChargesTotal = (customCharges: CustomCharge[]): number => {
-  if (!customCharges || customCharges.length === 0) return 0;
-  return customCharges.reduce((total, charge) => total + parseFloat(charge.amount), 0);
+export const calculateCustomChargesTotal = (
+  customCharges: CustomCharge[]
+): number => {
+  if (!customCharges || customCharges.length === 0) {
+    return 0;
+  }
+
+  return customCharges.reduce((total, charge) => {
+    return total + parseFloat(charge.amount || '0');
+  }, 0);
 };
 
 export const calculateTotalBillAmount = (
@@ -464,20 +659,25 @@ export const calculateTotalBillAmount = (
   const itemsTotal = calculateItemsTotal(billingItems);
   const customChargesTotal = calculateCustomChargesTotal(customCharges);
   const previousArrearsTotal = parseFloat(previousArrears) || 0;
+
   return itemsTotal + customChargesTotal + previousArrearsTotal;
 };
 
 export const isRecentBill = (dateString: string): boolean => {
   const billDate = new Date(dateString);
   const thirtyDaysAgo = new Date();
+
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
   return billDate > thirtyDaysAgo;
 };
 
 export const getDaysUntilDue = (dueDateString: string): number => {
   const dueDate = new Date(dueDateString);
   const today = new Date();
+
   const diffTime = dueDate.getTime() - today.getTime();
+
   return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 };
 
@@ -485,8 +685,15 @@ export const getDueDateStatus = (
   dueDateString: string
 ): 'overdue' | 'due-soon' | 'upcoming' => {
   const daysUntilDue = getDaysUntilDue(dueDateString);
-  if (daysUntilDue < 0) return 'overdue';
-  if (daysUntilDue <= 7) return 'due-soon';
+
+  if (daysUntilDue < 0) {
+    return 'overdue';
+  }
+
+  if (daysUntilDue <= 7) {
+    return 'due-soon';
+  }
+
   return 'upcoming';
 };
 
@@ -498,14 +705,23 @@ export const getCustomChargeColor = (index: number): string => {
     'bg-cyan-100 text-cyan-800 border-cyan-200',
     'bg-amber-100 text-amber-800 border-amber-200',
   ];
+
   return colors[index % colors.length];
 };
 
 export const formatCustomChargeLog = (log: StudentBillLog): string => {
-  if (log.field_name === 'custom_charge_added') return `Added custom charge: ${log.new_value}`;
-  if (log.field_name === 'custom_charge_updated')
+  if (log.field_name === 'custom_charge_added') {
+    return `Added custom charge: ${log.new_value}`;
+  }
+
+  if (log.field_name === 'custom_charge_updated') {
     return `Updated custom charge: ${log.old_value} → ${log.new_value}`;
-  if (log.field_name === 'custom_charge_removed') return `Removed custom charge: ${log.old_value}`;
+  }
+
+  if (log.field_name === 'custom_charge_removed') {
+    return `Removed custom charge: ${log.old_value}`;
+  }
+
   return `${log.field_name}: ${log.old_value || ''} → ${log.new_value || ''}`;
 };
 
@@ -519,6 +735,7 @@ export const getReceiptRequestStatusLabel = (
     rejected: 'Rejected',
     accepted: 'Accepted',
   };
+
   return labels[status] ?? status;
 };
 
@@ -532,6 +749,7 @@ export const getReceiptRequestStatusClasses = (
     rejected: 'bg-red-100 text-red-700',
     accepted: 'bg-emerald-100 text-emerald-700',
   };
+
   return map[status] ?? 'bg-slate-100 text-slate-700';
 };
 

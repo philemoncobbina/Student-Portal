@@ -9,6 +9,7 @@ import { useNavigate } from 'react-router-dom';
 import { getCurrentUser, logout } from '../../Services/studentApi';
 import { studentResultsService } from '../../Services/student-results-service';
 import { BookListService } from '../../Services/BookListService';
+import { StudentBillsService } from '../../Services/studentBillsService';
 import BookList from './BookList';
 import AccountManagement from './AccountManagement';
 import StudentResults from './StudentResults';
@@ -102,6 +103,32 @@ export default function SchoolDashboard() {
       } catch (error) {
         console.error('Error fetching booklists for notifications:', error);
         console.error('Full error details:', error.response?.data || error.message);
+      }
+
+      // Check for recent bills
+      try {
+        const billsResponse = await StudentBillsService.getAllBills();
+        const bills = billsResponse.bills;
+
+        if (bills && Array.isArray(bills)) {
+          bills.forEach(bill => {
+            if (bill.published_at) {
+              const publishedDate = new Date(bill.published_at);
+              if (publishedDate >= sevenDaysAgo && publishedDate <= now) {
+                recentNotifications.push({
+                  id: `bill-${bill.id}`,
+                  title: 'New Bill Published',
+                  description: `${bill.billing_template?.term ? bill.billing_template.term.charAt(0).toUpperCase() + bill.billing_template.term.slice(1) + ' term' : 'Term'} bill for ${bill.billing_template?.academic_year || ''} is now available`,
+                  time: getTimeAgo(bill.published_at),
+                  icon: <CreditCard size={16} className="text-blue-500" />,
+                  type: 'bill'
+                });
+              }
+            }
+          });
+        }
+      } catch (error) {
+        console.error('Error fetching bills for notifications:', error);
       }
 
       // Sort notifications by most recent first

@@ -2,7 +2,7 @@ import axios from 'axios';
 
 const postReservation = async (reservationData: any) => {
   try {
-    const response = await axios.post('http://127.0.0.1:8000/api/reservations/', reservationData);
+    const response = await axios.post('https://api.cobbina.uk/api/reservations/', reservationData);
     return response;
   } catch (error) {
     // Check if error response exists and contains data

@@ -26,7 +26,7 @@ function getAuthHeaders() {
 }
 
 /** Base URL — reads from Vite env var if present, falls back to relative path */
-const BASE_URL = 'http://127.0.0.1:8000/api';
+const BASE_URL = 'https://api.cobbina.uk/api';
 
 // ---------------------------------------------------------------------------
 // Service

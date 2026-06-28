@@ -25,13 +25,13 @@ export default function SchoolDashboard() {
   const navigate = useNavigate();
 
   const tools = [
-    { id: 'results',   name: 'Results',           icon: <FileText size={20} />,      color: 'bg-indigo-500',  description: 'View your academic performance' },
+    { id: 'results',   name: 'Results',            icon: <FileText size={20} />,      color: 'bg-indigo-500',  description: 'View your academic performance' },
     { id: 'courses',   name: 'My Courses',         icon: <GraduationCap size={20} />, color: 'bg-teal-500',    description: 'View your assigned courses & teachers' },
-    { id: 'booklist',  name: 'Book List',           icon: <Book size={20} />,          color: 'bg-emerald-500', description: 'Access required textbooks' },
-    { id: 'timetable', name: 'Time Table',          icon: <Calendar size={20} />,      color: 'bg-amber-500',   description: 'Check your weekly schedule' },
-    { id: 'materials', name: 'Learning Materials',  icon: <Compass size={20} />,       color: 'bg-rose-500',    description: 'Download study resources' },
-    { id: 'bills',     name: 'Bills',               icon: <CreditCard size={20} />,    color: 'bg-blue-500',    description: 'View and pay your school bills' },
-    { id: 'account',   name: 'Manage Account',      icon: <Settings size={20} />,      color: 'bg-purple-500',  description: 'Manage your account settings' },
+    { id: 'booklist',  name: 'Book List',          icon: <Book size={20} />,          color: 'bg-emerald-500', description: 'Access required textbooks' },
+    { id: 'timetable', name: 'Time Table',         icon: <Calendar size={20} />,      color: 'bg-amber-500',   description: 'Check your weekly schedule' },
+    { id: 'materials', name: 'Learning Materials', icon: <Compass size={20} />,       color: 'bg-rose-500',    description: 'Download study resources' },
+    { id: 'bills',     name: 'Bills',              icon: <CreditCard size={20} />,    color: 'bg-blue-500',    description: 'View and pay your school bills' },
+    { id: 'account',   name: 'Manage Account',     icon: <Settings size={20} />,      color: 'bg-purple-500',  description: 'Manage your account settings' },
   ];
 
   // Helper function to calculate time ago
@@ -185,6 +185,21 @@ export default function SchoolDashboard() {
     setIsMobileMenuOpen(!isMobileMenuOpen);
   };
 
+  // Handle notification bell click - go to dashboard if not already there
+  const handleNotificationClick = () => {
+    if (activeTab !== 'dashboard') {
+      setActiveTab('dashboard');
+      setIsMobileMenuOpen(false);
+    }
+    // Optional: scroll to Recent Activity section
+    setTimeout(() => {
+      const recentActivityEl = document.getElementById('recent-activity');
+      if (recentActivityEl) {
+        recentActivityEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 100);
+  };
+
   return (
     <div className="flex h-screen bg-gray-50 text-gray-800">
       {/* Mobile Menu Overlay */}
@@ -299,7 +314,12 @@ export default function SchoolDashboard() {
                 <Search size={18} />
               </button>
 
-              <button className="p-2 rounded-full hover:bg-gray-100 relative">
+              {/* Notification bell -> jumps to Recent Activity on Dashboard */}
+              <button
+                onClick={handleNotificationClick}
+                className="p-2 rounded-full hover:bg-gray-100 relative"
+                title="View recent activity"
+              >
                 <Bell size={20} />
                 {notificationCount > 0 && (
                   <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">
@@ -337,7 +357,7 @@ export default function SchoolDashboard() {
               </div>
 
               {/* Recent Activity */}
-              <div className="bg-white rounded-xl shadow-sm p-4 sm:p-6 border border-gray-100">
+              <div id="recent-activity" className="bg-white rounded-xl shadow-sm p-4 sm:p-6 border border-gray-100">
                 <h3 className="font-semibold text-base sm:text-lg mb-4">Recent Activity</h3>
                 <div className="space-y-3 sm:space-y-4">
                   {notifications.length > 0 ? (

@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 // Define base API URL - adjust this to your actual API endpoint
-const API_URL = 'https://api.cobbina.uk/api/api/api';
+const API_URL = 'https://api.cobbina.uk/api';
 
 // Authentication header helper
 const getAuthHeaders = () => {

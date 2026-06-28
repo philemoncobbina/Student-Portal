@@ -316,7 +316,7 @@ export default function SchoolDashboard() {
           {activeTab === 'dashboard' && (
             <>
               <h2 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6">
-                Welcome Bk, {userData.first_name || 'Student'}!
+                Welcome Back, {userData.first_name || 'Student'}!
               </h2>
 
               {/* Tools Grid */}

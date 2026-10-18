@@ -1,14 +1,31 @@
-//studentApi.ts
+// studentApi.ts (student portal)
 
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
+import { API_URL, setSessionExpiredHandler, setupHttp } from './http';
 
-// Base URL for all API requests
-const API_BASE_URL = 'https://api.cobbina.uk/api';
+// Endpoint paths, relative to API_URL. They must match the URL names in student_auth/urls.py
+// (user-detail/ lives in authapp/urls.py and works for any logged-in user).
+const ENDPOINTS = {
+  login: 'student-login/',
+  logout: 'student-logout/',
+  userDetail: 'user-detail/',
+} as const;
 
+const endpoint = (path: string) => `${API_URL}${path}`;
+
+// Where to send the student when the session is gone. Change it if your route is different.
+const STUDENT_LOGIN_ROUTE = '/login';
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+// While the backend still has AUTH_RETURN_TOKENS_IN_BODY=True the tokens also appear in the
+// response body. They are ignored: the HttpOnly cookies are the credentials.
 interface LoginResponse {
-  access_token: string;
-  refresh_token: string;
+  access_token?: string;
+  refresh_token?: string;
   user: {
     id: number;
     email: string;
@@ -32,7 +49,8 @@ interface LoginResult {
   user?: LoginResponse['user'];
 }
 
-// Detailed user interface based on CustomUser model
+// Detailed user interface based on the CustomUser model.
+// CHANGED: `verification_code` is removed. Nothing in the browser should ever need it.
 interface UserDetails {
   id: number;
   email: string;
@@ -48,100 +66,129 @@ interface UserDetails {
   is_google_account: boolean;
   index_number: string;
   class_name: string | null;
-  verification_code: string | null;
 }
 
-// Student login function
+// ---------------------------------------------------------------------------
+// Client-side state: a UI hint only. The cookies are the real credentials.
+// ---------------------------------------------------------------------------
+
+const SESSION_KEY = 'student_session';
+// Left over from the old token-in-localStorage version (and from Login.ts).
+const LEGACY_KEYS = ['access_token', 'refresh_token', 'user_data', 'auth_method'];
+
+const hasSessionHint = (): boolean => localStorage.getItem(SESSION_KEY) === '1';
+
+const markSession = (): void => {
+  localStorage.setItem(SESSION_KEY, '1');
+  LEGACY_KEYS.forEach((k) => localStorage.removeItem(k));
+};
+
+const clearLocalSession = (): void => {
+  localStorage.removeItem(SESSION_KEY);
+  LEGACY_KEYS.forEach((k) => localStorage.removeItem(k));
+};
+
+/** For code that ends the session itself, for example after a password change. */
+export const endLocalSession = clearLocalSession;
+
+const messageFrom = (error: any, fallback: string): string =>
+  error.response
+    ? error.response.data?.error || error.response.data?.message || fallback
+    : 'Unable to reach the server. Check your connection.';
+
+// ---------------------------------------------------------------------------
+// Login / Logout
+// ---------------------------------------------------------------------------
+
 export const loginStudent = async (credentials: LoginRequest): Promise<LoginResult> => {
   try {
-    const response = await axios.post<LoginResponse>(`${API_BASE_URL}/student-login/`, credentials);
-    const { access_token, refresh_token, user } = response.data;
+    const { data } = await axios.post<LoginResponse>(endpoint(ENDPOINTS.login), credentials);
 
-    // Store only authentication tokens in localStorage
-    localStorage.setItem('access_token', access_token);
-    localStorage.setItem('refresh_token', refresh_token);
-
-    return { success: true, user };
+    // The cookies were set by the response; only a hint is kept here (no personal data).
+    markSession();
+    return { success: true, user: data.user };
   } catch (error: any) {
-    let errorMessage = 'An unknown error occurred';
-    if (error.response && error.response.data) {
-      errorMessage = error.response.data.error;
-    }
-
-    return { success: false, error: errorMessage };
+    return { success: false, error: messageFrom(error, 'Login failed') };
   }
 };
 
-// Get authentication headers for API requests
-export const getAuthHeaders = (): { Authorization: string } => {
-  const accessToken = localStorage.getItem('access_token');
-  if (!accessToken) {
-    throw new Error('No access token found');
-  }
-  return { Authorization: `Bearer ${accessToken}` };
-};
-
-// Check if user is authenticated (has valid token)
-export const isAuthenticated = (): boolean => {
-  return !!localStorage.getItem('access_token');
-};
-
-// Get the current logged-in user from API
-export const getCurrentUser = async (): Promise<UserDetails | null> => {
+export const logout = async (navigate: ReturnType<typeof useNavigate>): Promise<void> => {
   try {
-    const headers = getAuthHeaders();
-    const response = await axios.get<UserDetails>(`${API_BASE_URL}/user-detail/`, { headers });
-    return response.data;
+    await axios.post(endpoint(ENDPOINTS.logout), {}, { skipAuthRedirect: true });
+  } catch (error: any) {
+    console.error('Logout failed:', error.response?.data || error.message);
+  } finally {
+    clearLocalSession();
+    navigate('/');
+  }
+};
+
+// ---------------------------------------------------------------------------
+// Session
+// ---------------------------------------------------------------------------
+
+/** @deprecated Cookies carry the credentials now. Kept so existing `headers: getAuthHeaders()` calls still work. */
+export const getAuthHeaders = (): Record<string, string> => ({});
+
+/** Synchronous UI hint. Use checkSession() when the answer matters. */
+export const isAuthenticated = (): boolean => hasSessionHint();
+
+/**
+ * Get the logged-in user from the API. Pass { silent: true } for background checks that
+ * should not redirect to the login page when the session is gone.
+ */
+export const getCurrentUser = async (
+  options: { silent?: boolean } = {}
+): Promise<UserDetails | null> => {
+  try {
+    const { data } = await axios.get<UserDetails>(endpoint(ENDPOINTS.userDetail), {
+      skipAuthRedirect: options.silent ?? false,
+    });
+    return data;
   } catch (error: any) {
     console.error('Failed to fetch current user:', error.response?.data || error.message);
     return null;
   }
 };
 
-// Check if user is logged in as a student (via API)
-export const isStudentLoggedIn = async (): Promise<boolean> => {
-  try {
-    if (!isAuthenticated()) {
-      return false;
-    }
-    
-    const user = await getCurrentUser();
-    return user?.role === 'student';
-  } catch (error) {
-    console.error('Failed to check student login status:', error);
-    return false;
-  }
-};
-
-// Session check to verify if user is still logged in with role information
-export const checkSession = async (): Promise<{ 
-  loggedIn: boolean; 
+// Session check with role information.
+export const checkSession = async (): Promise<{
+  loggedIn: boolean;
   isStudent?: boolean;
   user?: UserDetails;
 }> => {
+  // Visitors who never logged in cost no requests at all.
+  if (!hasSessionHint()) {
+    return { loggedIn: false };
+  }
+
   try {
-    if (!isAuthenticated()) {
-      return { loggedIn: false };
+    // A 401 here triggers one silent refresh (see http.ts) before this call gives up.
+    const { data } = await axios.get<UserDetails>(endpoint(ENDPOINTS.userDetail), {
+      skipAuthRedirect: true,
+    });
+    return { loggedIn: true, isStudent: data.role === 'student', user: data };
+  } catch (error: any) {
+    if (axios.isAxiosError(error) && !error.response) {
+      // Server unreachable: keep the student on the page. API calls will still fail.
+      console.warn('Offline fallback: keeping the existing session');
+      return { loggedIn: true, isStudent: true };
     }
 
-    const user = await getCurrentUser();
-    if (user) {
-      return { 
-        loggedIn: true, 
-        isStudent: user.role === 'student',
-        user 
-      };
-    }
-  } catch (error: any) {
-    console.error('Session check failed:', error.response?.data || error.message);
-    // If there's an auth error, clear the tokens
-    if (error.response?.status === 401) {
-      localStorage.removeItem('access_token');
-      localStorage.removeItem('refresh_token');
+    if (axios.isAxiosError(error) && [401, 403].includes(error.response?.status ?? 0)) {
+      clearLocalSession();
+    } else {
+      console.error('Session check failed:', error.response?.data || error.message);
     }
   }
 
   return { loggedIn: false };
+};
+
+// Check if the user is logged in as a student (via API)
+export const isStudentLoggedIn = async (): Promise<boolean> => {
+  const session = await checkSession();
+  return session.loggedIn && !!session.isStudent;
 };
 
 // Get detailed user information (alias for getCurrentUser for consistency)
@@ -149,26 +196,14 @@ export const getUserDetails = async (): Promise<UserDetails | null> => {
   return await getCurrentUser();
 };
 
-// Logout function
-export const logout = async (navigate: ReturnType<typeof useNavigate>): Promise<void> => {
-  try {
-    const headers = getAuthHeaders();
-    await axios.post(`${API_BASE_URL}/logout/`, {}, { headers });
-  } catch (error: any) {
-    console.error('Logout failed:', error.response?.data || error.message);
-  } finally {
-    // Clear all stored data
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('refresh_token');
-    navigate('/');
-  }
-};
+// ---------------------------------------------------------------------------
+// Generic authenticated helpers
+// ---------------------------------------------------------------------------
 
-// Generic function to fetch data with authentication
+/** The URL must start with API_URL, or the cookie and CSRF header are not attached. */
 export const fetchData = async (url: string) => {
   try {
-    const headers = getAuthHeaders();
-    const response = await axios.get(url, { headers });
+    const response = await axios.get(url);
     return response.data;
   } catch (error: any) {
     console.error('Failed to fetch data:', error.response?.data || error.message);
@@ -176,15 +211,36 @@ export const fetchData = async (url: string) => {
   }
 };
 
-// Generic function to post data with authentication
+/** The URL must start with API_URL, or the cookie and CSRF header are not attached. */
 export const postData = async (url: string, data: any) => {
   try {
-    const headers = getAuthHeaders();
-    const response = await axios.post(url, data, { headers });
+    const response = await axios.post(url, data);
     return response.data;
   } catch (error: any) {
     console.error('Failed to post data:', error.response?.data || error.message);
     throw error;
+  }
+};
+
+// ---------------------------------------------------------------------------
+// Startup: call initAuth() once, before the app renders (main.tsx)
+// ---------------------------------------------------------------------------
+
+export const initAuth = (): void => {
+  setupHttp();
+
+  // Runs when a request got a 401, the silent refresh failed, and the request wasn't a background check.
+  setSessionExpiredHandler(() => {
+    const hadSession = hasSessionHint();
+    clearLocalSession();
+    if (hadSession && window.location.pathname !== STUDENT_LOGIN_ROUTE) {
+      window.location.replace(STUDENT_LOGIN_ROUTE);
+    }
+  });
+
+  // A session from the old token-in-localStorage version can't work any more: start logged out.
+  if (localStorage.getItem('access_token')) {
+    clearLocalSession();
   }
 };
 
@@ -199,4 +255,6 @@ export default {
   logout,
   fetchData,
   postData,
+  initAuth,
+  endLocalSession,
 };

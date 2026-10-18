@@ -1,37 +1,23 @@
 // Services/studentBillsService.ts
 import axios, { AxiosResponse } from 'axios';
+// CHANGED: shared cookie/CSRF layer. Adjust the path if http.ts lives somewhere else.
+import { API_URL, setupHttp } from './http';
 
-// Base API configuration
-const API_BASE_URL = 'https://api.cobbina.uk/api';
-
+// CHANGED: the base URL comes from VITE_API_URL (through http.ts) instead of being hardcoded.
+// Credentials travel as HttpOnly cookies, so there is no token or Authorization header here.
 const api = axios.create({
-  baseURL: API_BASE_URL,
+  baseURL: API_URL,
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// Authentication header helper
-const getAuthHeaders = () => {
-  const accessToken = localStorage.getItem('access_token');
-  return { Authorization: `Bearer ${accessToken}` };
-};
+// CHANGED: this instance needs the same interceptors as the default axios (cookies on every
+// request, the X-CSRFToken header on POST/PATCH/DELETE, one silent refresh on a 401).
+// setupHttp ignores instances it has already set up, so calling it again is safe.
+setupHttp(api);
 
-// Add request interceptor to include auth token
-api.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem('access_token');
-
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-
-    return config;
-  },
-  (error) => {
-    return Promise.reject(error);
-  }
-);
+// REMOVED: getAuthHeaders() and the request interceptor that added "Authorization: Bearer ...".
 
 // ---------------------------------------------------------------------------
 // TypeScript interfaces
@@ -233,18 +219,14 @@ export interface PaymentReceiptRequestsResponse {
 export class StudentBillsService {
   /** Get all bills for the authenticated student with summary */
   static async getAllBills(): Promise<StudentBillsResponse> {
-    const response: AxiosResponse<StudentBillsResponse> = await api.get('/my-bills/', {
-      headers: getAuthHeaders(),
-    });
+    const response: AxiosResponse<StudentBillsResponse> = await api.get('/my-bills/');
 
     return response.data;
   }
 
   /** Get bills for student's current class only */
   static async getCurrentClassBills(): Promise<StudentBill[]> {
-    const response: AxiosResponse<StudentBill[]> = await api.get('/my-bills/current-class/', {
-      headers: getAuthHeaders(),
-    });
+    const response: AxiosResponse<StudentBill[]> = await api.get('/my-bills/current-class/');
 
     return response.data;
   }
@@ -252,10 +234,7 @@ export class StudentBillsService {
   /** Get bills from student's previous classes */
   static async getPreviousClassBills(): Promise<StudentBill[]> {
     const response: AxiosResponse<StudentBill[]> = await api.get(
-      '/billing/my-bills/previous-classes/',
-      {
-        headers: getAuthHeaders(),
-      }
+      '/billing/my-bills/previous-classes/'
     );
 
     return response.data;
@@ -264,10 +243,7 @@ export class StudentBillsService {
   /** Get logs for a specific bill */
   static async getBillLogs(billId: number): Promise<StudentBillLog[]> {
     const response: AxiosResponse<StudentBillLog[]> = await api.get(
-      `/billing/bills/${billId}/logs/`,
-      {
-        headers: getAuthHeaders(),
-      }
+      `/billing/bills/${billId}/logs/`
     );
 
     return response.data;
@@ -275,12 +251,7 @@ export class StudentBillsService {
 
   /** Get a specific bill details */
   static async getBillDetails(billId: number): Promise<StudentBill> {
-    const response: AxiosResponse<StudentBill> = await api.get(
-      `/billing/bills/${billId}/`,
-      {
-        headers: getAuthHeaders(),
-      }
-    );
+    const response: AxiosResponse<StudentBill> = await api.get(`/billing/bills/${billId}/`);
 
     return response.data;
   }
@@ -290,7 +261,6 @@ export class StudentBillsService {
     const response: AxiosResponse<Blob> = await api.get(
       `/billing/bills/${billId}/download/`,
       {
-        headers: getAuthHeaders(),
         responseType: 'blob',
       }
     );
@@ -309,9 +279,6 @@ export class StudentBillsService {
       {
         amount,
         payment_method: paymentMethod,
-      },
-      {
-        headers: getAuthHeaders(),
       }
     );
 
@@ -321,10 +288,7 @@ export class StudentBillsService {
   /** Get custom charges for a specific bill */
   static async getCustomCharges(billId: number): Promise<CustomCharge[]> {
     const response: AxiosResponse<CustomCharge[]> = await api.get(
-      `/billing/bills/${billId}/custom-charges/`,
-      {
-        headers: getAuthHeaders(),
-      }
+      `/billing/bills/${billId}/custom-charges/`
     );
 
     return response.data;
@@ -337,10 +301,7 @@ export class StudentBillsService {
   ): Promise<CustomCharge> {
     const response: AxiosResponse<CustomCharge> = await api.post(
       `/billing/bills/${billId}/custom-charges/`,
-      chargeData,
-      {
-        headers: getAuthHeaders(),
-      }
+      chargeData
     );
 
     return response.data;
@@ -354,10 +315,7 @@ export class StudentBillsService {
   ): Promise<CustomCharge> {
     const response: AxiosResponse<CustomCharge> = await api.patch(
       `/billing/bills/${billId}/custom-charges/${chargeId}/`,
-      chargeData,
-      {
-        headers: getAuthHeaders(),
-      }
+      chargeData
     );
 
     return response.data;
@@ -368,9 +326,7 @@ export class StudentBillsService {
     billId: number,
     chargeId: number
   ): Promise<void> {
-    await api.delete(`/billing/bills/${billId}/custom-charges/${chargeId}/`, {
-      headers: getAuthHeaders(),
-    });
+    await api.delete(`/billing/bills/${billId}/custom-charges/${chargeId}/`);
   }
 }
 
@@ -402,9 +358,10 @@ export class PaymentReceiptRequestService {
 
     formData.append('proof_of_payment', payload.proof_of_payment);
 
+    // CHANGED: only the Content-Type is set here; the cookie and the CSRF header are added by
+    // the interceptors.
     const response = await api.post('/receipt-requests/', formData, {
       headers: {
-        ...getAuthHeaders(),
         'Content-Type': 'multipart/form-data',
       },
     });
@@ -431,7 +388,6 @@ export class PaymentReceiptRequestService {
     const response: AxiosResponse<
       PaymentReceiptRequest[] | PaymentReceiptRequestsResponse
     > = await api.get('/receipt-requests/', {
-      headers: getAuthHeaders(),
       params,
     });
 
@@ -456,10 +412,7 @@ export class PaymentReceiptRequestService {
    */
   static async getRequest(requestId: number): Promise<PaymentReceiptRequest> {
     const response: AxiosResponse<PaymentReceiptRequest> = await api.get(
-      `/receipt-requests/${requestId}/`,
-      {
-        headers: getAuthHeaders(),
-      }
+      `/receipt-requests/${requestId}/`
     );
 
     return response.data;
@@ -475,10 +428,7 @@ export class PaymentReceiptRequestService {
     requestId: number
   ): Promise<PaymentReceiptRequestLog[]> {
     const response: AxiosResponse<PaymentReceiptRequestLog[]> = await api.get(
-      `/receipt-requests/${requestId}/logs/`,
-      {
-        headers: getAuthHeaders(),
-      }
+      `/receipt-requests/${requestId}/logs/`
     );
 
     return response.data;

@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import {
   Book, Calendar, FileText, Compass, Bell, Search, User, LogOut,
   Menu, X, Settings, Mail, Hash, Shield, CheckCircle, XCircle,
-  Eye, EyeOff, Edit3, Save, AlertCircle, CreditCard, GraduationCap
+  Eye, EyeOff, Edit3, Save, AlertCircle, CreditCard, GraduationCap,
+  CalendarCheck
 } from 'lucide-react';
 
 import { useNavigate } from 'react-router-dom';
@@ -10,11 +11,13 @@ import { getCurrentUser, logout } from '../../Services/studentApi';
 import { studentResultsService } from '../../Services/student-results-service';
 import { BookListService } from '../../Services/BookListService';
 import { StudentBillsService } from '../../Services/studentBillsService';
+import { StudentAttendanceService, parseLocalDate } from '../../Services/StudentAttendanceService';
 import BookList from './BookList';
 import AccountManagement from './AccountManagement';
 import StudentResults from './StudentResults';
 import StudentBillsPortal from './StudentBillsPortal';
 import StudentCourses from './StudentCourses';
+import StudentAttendance from './StudentAttendance';
 
 export default function SchoolDashboard() {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -25,13 +28,14 @@ export default function SchoolDashboard() {
   const navigate = useNavigate();
 
   const tools = [
-    { id: 'results',   name: 'Results',            icon: <FileText size={20} />,      color: 'bg-indigo-500',  description: 'View your academic performance' },
-    { id: 'courses',   name: 'My Courses',         icon: <GraduationCap size={20} />, color: 'bg-teal-500',    description: 'View your assigned courses & teachers' },
-    { id: 'booklist',  name: 'Book List',          icon: <Book size={20} />,          color: 'bg-emerald-500', description: 'Access required textbooks' },
-    { id: 'timetable', name: 'Time Table',         icon: <Calendar size={20} />,      color: 'bg-amber-500',   description: 'Check your weekly schedule' },
-    { id: 'materials', name: 'Learning Materials', icon: <Compass size={20} />,       color: 'bg-rose-500',    description: 'Download study resources' },
-    { id: 'bills',     name: 'Bills',              icon: <CreditCard size={20} />,    color: 'bg-blue-500',    description: 'View and pay your school bills' },
-    { id: 'account',   name: 'Manage Account',     icon: <Settings size={20} />,      color: 'bg-purple-500',  description: 'Manage your account settings' },
+    { id: 'results',    name: 'Results',            icon: <FileText size={20} />,      color: 'bg-indigo-500',  description: 'View your academic performance' },
+    { id: 'courses',    name: 'My Courses',         icon: <GraduationCap size={20} />, color: 'bg-teal-500',    description: 'View your assigned courses & teachers' },
+    { id: 'attendance', name: 'Attendance',         icon: <CalendarCheck size={20} />, color: 'bg-cyan-500',    description: 'Track your daily attendance record' },
+    { id: 'booklist',   name: 'Book List',          icon: <Book size={20} />,          color: 'bg-emerald-500', description: 'Access required textbooks' },
+    { id: 'timetable',  name: 'Time Table',         icon: <Calendar size={20} />,      color: 'bg-amber-500',   description: 'Check your weekly schedule' },
+    { id: 'materials',  name: 'Learning Materials', icon: <Compass size={20} />,       color: 'bg-rose-500',    description: 'Download study resources' },
+    { id: 'bills',      name: 'Bills',              icon: <CreditCard size={20} />,    color: 'bg-blue-500',    description: 'View and pay your school bills' },
+    { id: 'account',    name: 'Manage Account',     icon: <Settings size={20} />,      color: 'bg-purple-500',  description: 'Manage your account settings' },
   ];
 
   // Helper function to calculate time ago
@@ -47,6 +51,17 @@ export default function SchoolDashboard() {
     } else {
       return `${diffInDays} day${diffInDays > 1 ? 's' : ''} ago`;
     }
+  };
+
+  // Attendance records are date-only (no time), so label them by calendar day
+  const getDateLabel = (isoDate) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const diffInDays = Math.round((today - parseLocalDate(isoDate)) / (1000 * 60 * 60 * 24));
+
+    if (diffInDays <= 0) return 'Today';
+    if (diffInDays === 1) return 'Yesterday';
+    return `${diffInDays} days ago`;
   };
 
   // Check for recent notifications
@@ -68,6 +83,7 @@ export default function SchoolDashboard() {
                 title: 'New Results Published',
                 description: `${result.class_name} - ${result.term} term results are now available`,
                 time: getTimeAgo(result.published_date),
+                timestamp: publishedDate.getTime(),
                 icon: <FileText size={16} className="text-indigo-500" />,
                 type: 'result'
               });
@@ -93,6 +109,7 @@ export default function SchoolDashboard() {
                   title: 'New Book List Published',
                   description: `${booklist.title} for ${booklist.class_name_display || booklist.class_name}`,
                   time: getTimeAgo(booklist.publish_date),
+                  timestamp: publishedDate.getTime(),
                   icon: <Book size={16} className="text-emerald-500" />,
                   type: 'booklist'
                 });
@@ -120,6 +137,7 @@ export default function SchoolDashboard() {
                   title: 'New Bill Published',
                   description: `${bill.billing_template?.term ? bill.billing_template.term.charAt(0).toUpperCase() + bill.billing_template.term.slice(1) + ' term' : 'Term'} bill for ${bill.billing_template?.academic_year || ''} is now available`,
                   time: getTimeAgo(bill.published_at),
+                  timestamp: publishedDate.getTime(),
                   icon: <CreditCard size={16} className="text-blue-500" />,
                   type: 'bill'
                 });
@@ -131,12 +149,32 @@ export default function SchoolDashboard() {
         console.error('Error fetching bills for notifications:', error);
       }
 
+      // Check for recent absences (marked absent in the last 7 days)
+      try {
+        const attendanceRecords = await StudentAttendanceService.getRecentRecords(7);
+
+        attendanceRecords.forEach(record => {
+          if (record.status === 'absent') {
+            const recordDate = parseLocalDate(record.date);
+            recentNotifications.push({
+              id: `attendance-${record.id ?? record.date}`,
+              title: 'Absence Recorded',
+              description: record.reason
+                ? `You were marked absent on ${recordDate.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })}: ${record.reason}`
+                : `You were marked absent on ${recordDate.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })}`,
+              time: getDateLabel(record.date),
+              timestamp: recordDate.getTime(),
+              icon: <CalendarCheck size={16} className="text-cyan-500" />,
+              type: 'attendance'
+            });
+          }
+        });
+      } catch (error) {
+        console.error('Error fetching attendance for notifications:', error);
+      }
+
       // Sort notifications by most recent first
-      recentNotifications.sort((a, b) => {
-        const timeA = a.time.includes('hour') || a.time === 'Just now' ? 0 : parseInt(a.time);
-        const timeB = b.time.includes('hour') || b.time === 'Just now' ? 0 : parseInt(b.time);
-        return timeA - timeB;
-      });
+      recentNotifications.sort((a, b) => b.timestamp - a.timestamp);
 
       setNotifications(recentNotifications);
       setNotificationCount(recentNotifications.length);
@@ -383,11 +421,12 @@ export default function SchoolDashboard() {
             </>
           )}
 
-          {activeTab === 'courses'   && <StudentCourses />}
-          {activeTab === 'booklist'  && <BookList />}
-          {activeTab === 'results'   && <StudentResults />}
-          {activeTab === 'bills'     && <StudentBillsPortal />}
-          {activeTab === 'account'   && <AccountManagement />}
+          {activeTab === 'courses'    && <StudentCourses />}
+          {activeTab === 'attendance' && <StudentAttendance />}
+          {activeTab === 'booklist'   && <BookList />}
+          {activeTab === 'results'    && <StudentResults />}
+          {activeTab === 'bills'      && <StudentBillsPortal />}
+          {activeTab === 'account'    && <AccountManagement />}
         </main>
       </div>
     </div>

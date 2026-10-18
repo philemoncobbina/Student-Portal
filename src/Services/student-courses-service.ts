@@ -1,4 +1,10 @@
 import axios from 'axios';
+// CHANGED: shared cookie/CSRF layer. Adjust the path if http.ts lives somewhere else.
+import { API_URL, setupHttp } from './http';
+
+// CHANGED: make sure the default axios has the cookie + CSRF + silent-refresh interceptors.
+// setupHttp ignores instances it has already set up, so this is safe even if initAuth() ran first.
+setupHttp();
 
 // ---------------------------------------------------------------------------
 // Types
@@ -10,23 +16,23 @@ export const CourseItem = null; // This is just for type reference in JSDoc
 /** Shape of the envelope the backend wraps courses in */
 export const CoursesResponse = null; // This is just for type reference in JSDoc
 
+// CHANGED: typed parameters (the untyped `params.term` did not compile as TypeScript).
+export interface CurrentCoursesParams {
+  term?: string;
+}
+
+export interface PreviousCoursesParams {
+  class_name: string;
+  term: string;
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Retrieve the stored auth token exactly the same way the rest of the app does */
-function getAuthHeaders() {
-  const token =
-    localStorage.getItem('access_token') ||
-    localStorage.getItem('token') ||
-    sessionStorage.getItem('access_token') ||
-    '';
-
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
-
-/** Base URL — reads from Vite env var if present, falls back to relative path */
-const BASE_URL = 'https://api.cobbina.uk/api';
+// REMOVED: getAuthHeaders(), which read a token from localStorage/sessionStorage, and the
+// hardcoded BASE_URL. Credentials travel as HttpOnly cookies, and the base URL is API_URL from
+// http.ts (VITE_API_URL). It ends with a "/", so the paths below don't start with one.
 
 // ---------------------------------------------------------------------------
 // Service
@@ -39,14 +45,9 @@ export const studentCoursesService = {
    * GET /api/my-courses/
    * Optional query: ?term=first|second|third
    */
-  async getCurrentCourses(params = {}) {
-    const query = new URLSearchParams();
-    if (params.term) query.set('term', params.term);
-
-    const url = `${BASE_URL}/my-courses/${query.toString() ? `?${query}` : ''}`;
-
-    const { data } = await axios.get(url, {
-      headers: getAuthHeaders(),
+  async getCurrentCourses(params: CurrentCoursesParams = {}) {
+    const { data } = await axios.get(`${API_URL}my-courses/`, {
+      params: params.term ? { term: params.term } : {},
     });
 
     return data;
@@ -57,16 +58,9 @@ export const studentCoursesService = {
    *
    * GET /api/my-courses/previous/?class_name=&term=
    */
-  async getPreviousCourses(params) {
-    const query = new URLSearchParams({
-      class_name: params.class_name,
-      term: params.term,
-    });
-
-    const url = `${BASE_URL}/my-courses/previous/?${query}`;
-
-    const { data } = await axios.get(url, {
-      headers: getAuthHeaders(),
+  async getPreviousCourses(params: PreviousCoursesParams) {
+    const { data } = await axios.get(`${API_URL}my-courses/previous/`, {
+      params: { class_name: params.class_name, term: params.term },
     });
 
     return data;
@@ -78,12 +72,9 @@ export const studentCoursesService = {
    *
    * GET /api/my-courses/by_class_and_term/?class_name=&term=
    */
-  async getCoursesByClassAndTerm(class_name, term) {
-    const query = new URLSearchParams({ class_name, term });
-    const url = `${BASE_URL}/my-courses/by_class_and_term/?${query}`;
-
-    const { data } = await axios.get(url, {
-      headers: getAuthHeaders(),
+  async getCoursesByClassAndTerm(class_name: string, term: string) {
+    const { data } = await axios.get(`${API_URL}my-courses/by_class_and_term/`, {
+      params: { class_name, term },
     });
 
     return data;

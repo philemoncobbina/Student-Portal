@@ -1,13 +1,14 @@
 import axios from 'axios';
+// CHANGED: shared cookie/CSRF layer. Adjust the path if http.ts lives somewhere else.
+import { API_URL, setupHttp } from './http';
 
-// Define base API URL - adjust this to your actual API endpoint
-const API_URL = 'https://api.cobbina.uk/api';
+// CHANGED: make sure the default axios has the cookie + CSRF + silent-refresh interceptors.
+// setupHttp ignores instances it has already set up, so this is safe even if initAuth() ran first.
+setupHttp();
 
-// Authentication header helper
-const getAuthHeaders = () => {
-  const accessToken = localStorage.getItem('access_token');
-  return { Authorization: `Bearer ${accessToken}` };
-};
+// CHANGED: API_URL now comes from http.ts (VITE_API_URL) and ends with a "/", so the paths
+// below no longer start with one. Credentials travel as HttpOnly cookies.
+// REMOVED: the hardcoded API_URL and getAuthHeaders() (the "Authorization: Bearer ..." header).
 
 // Type definitions based on the backend models
 export interface BookListItem {
@@ -47,14 +48,20 @@ export interface StudentClassHistory {
   class_name_display: string;
 }
 
+// CHANGED: builds the query string from only the filters that were provided.
+const filterParams = (academicYear?: string | null, className?: string | null) => {
+  const params: Record<string, string> = {};
+  if (academicYear) params.academic_year = academicYear;
+  if (className) params.class_name = className;
+  return params;
+};
+
 export const BookListService = {
   /**
    * Get ONLY the booklists for the student's current class in current academic year
    */
   getCurrentClassBooklists: async () => {
-    return axios.get<BookList[]>(`${API_URL}/booklists/my_class/`, {
-      headers: getAuthHeaders()
-    });
+    return axios.get<BookList[]>(`${API_URL}booklists/my_class/`);
   },
 
   /**
@@ -62,17 +69,8 @@ export const BookListService = {
    * Optional filters for academic year and class
    */
   getMyClassBooklists: async (academicYear?: string | null, className?: string | null) => {
-    let url = `${API_URL}/booklists/my_class/`;
-    
-    const params = new URLSearchParams();
-    if (academicYear) params.append('academic_year', academicYear);
-    if (className) params.append('class_name', className);
-    
-    const queryString = params.toString();
-    if (queryString) url += `?${queryString}`;
-    
-    return axios.get<BookList[]>(url, {
-      headers: getAuthHeaders()
+    return axios.get<BookList[]>(`${API_URL}booklists/my_class/`, {
+      params: filterParams(academicYear, className),
     });
   },
 
@@ -81,17 +79,8 @@ export const BookListService = {
    * Optional filters for academic year and class
    */
   getPreviousClassesBooklists: async (academicYear?: string | null, className?: string | null) => {
-    let url = `${API_URL}/booklists/previous_classes/`;
-    
-    const params = new URLSearchParams();
-    if (academicYear) params.append('academic_year', academicYear);
-    if (className) params.append('class_name', className);
-    
-    const queryString = params.toString();
-    if (queryString) url += `?${queryString}`;
-    
-    return axios.get<BookList[]>(url, {
-      headers: getAuthHeaders()
+    return axios.get<BookList[]>(`${API_URL}booklists/previous_classes/`, {
+      params: filterParams(academicYear, className),
     });
   },
 
@@ -99,20 +88,16 @@ export const BookListService = {
    * Get booklists from previous academic years
    */
   getBooklistHistory: async () => {
-    return axios.get<BookList[]>(`${API_URL}/booklists/history/`, {
-      headers: getAuthHeaders()
-    });
+    return axios.get<BookList[]>(`${API_URL}booklists/history/`);
   },
 
   /**
    * Get details for a specific booklist
    */
   getBooklistDetails: async (booklistId: number) => {
-    return axios.get<BookList>(`${API_URL}/booklists/${booklistId}/`, {
-      headers: getAuthHeaders()
-    });
+    return axios.get<BookList>(`${API_URL}booklists/${booklistId}/`);
   },
-    
+
   /**
    * Calculate the total price of all items in a booklist
    * (This is a helper function, not an API call)

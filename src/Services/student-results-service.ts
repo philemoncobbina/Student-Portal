@@ -1,4 +1,6 @@
 import axios, { AxiosResponse } from 'axios';
+// CHANGED: shared cookie/CSRF layer. Adjust the path if http.ts lives somewhere else.
+import { API_URL, setupHttp } from './http';
 
 // Types based on the backend models
 export interface Course {
@@ -61,7 +63,8 @@ class StudentResultsService {
   private readonly baseURL: string;
   private readonly apiClient;
 
-  constructor(baseURL: string = 'https://api.cobbina.uk/api') {
+  // CHANGED: the default base URL comes from VITE_API_URL (through http.ts) instead of being hardcoded.
+  constructor(baseURL: string = API_URL) {
     this.baseURL = baseURL;
     this.apiClient = axios.create({
       baseURL: this.baseURL,
@@ -69,13 +72,15 @@ class StudentResultsService {
         'Content-Type': 'application/json',
       },
     });
+
+    // CHANGED: this instance needs the same interceptors as the default axios (cookies on every
+    // request, the X-CSRFToken header on POST, one silent refresh on a 401).
+    // setupHttp ignores instances it has already set up, so calling it again is safe.
+    setupHttp(this.apiClient);
   }
 
-  // Authentication header helper
-  private getAuthHeaders() {
-    const accessToken = localStorage.getItem('access_token');
-    return { Authorization: `Bearer ${accessToken}` };
-  }
+  // REMOVED: getAuthHeaders() and every `headers: this.getAuthHeaders()` argument.
+  // Credentials travel as HttpOnly cookies, so there is no token or Authorization header here.
 
   /**
    * Get current class results for the authenticated student
@@ -84,7 +89,6 @@ class StudentResultsService {
     try {
       const response: AxiosResponse<Result[]> = await this.apiClient.get('/my-results/current_class/', {
         params,
-        headers: this.getAuthHeaders(),
       });
       return response.data;
     } catch (error) {
@@ -100,7 +104,6 @@ class StudentResultsService {
     try {
       const response: AxiosResponse<Result[]> = await this.apiClient.get('/my-results/previous_classes/', {
         params,
-        headers: this.getAuthHeaders(),
       });
       return response.data;
     } catch (error) {
@@ -116,7 +119,6 @@ class StudentResultsService {
     try {
       const response: AxiosResponse<Result[]> = await this.apiClient.get('/my-results/', {
         params,
-        headers: this.getAuthHeaders(),
       });
       return response.data;
     } catch (error) {
@@ -139,10 +141,8 @@ class StudentResultsService {
     }
   }
 
-  /**
-  
-
-  
+  // CHANGED: removed a stray, unclosed "/**" here. It turned the next doc comment into part of
+  // an open comment block. The code behaved the same, but it was easy to break by accident.
 
   /**
    * Format score for display

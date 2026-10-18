@@ -1,6 +1,19 @@
-import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
+// Services/StudentAuth.jsx
+
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useMemo,
+  useCallback,
+  useRef,
+} from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
-import { isAuthenticated, getCurrentUser } from './studentApi';
+// CHANGED: checkSession replaces getCurrentUser here. It returns the user and the role, clears the
+// stored "logged in" hint on a 401/403, and keeps the student on the page if the server is
+// unreachable. It also never redirects by itself (a background check).
+import { isAuthenticated, checkSession } from './studentApi';
 
 // Create Student Auth Context
 const StudentAuthContext = createContext(null);
@@ -10,53 +23,45 @@ export const StudentAuthProvider = ({ children }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [isStudentAuth, setIsStudentAuth] = useState(false);
 
-  // Check student session on mount
-  useEffect(() => {
-    const verifySession = async () => {
-      try {
-        console.log("StudentAuth - Starting session verification...");
-        
-        // First check if user is authenticated
-        if (!isAuthenticated()) {
-          console.log("StudentAuth - No authentication token found");
-          setCurrentUser(null);
-          setIsStudentAuth(false);
-          setIsLoading(false);
-          return;
-        }
+  // CHANGED: now a reusable function, so a page that just logged in can ask for a fresh check.
+  const refreshSession = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      // The server is asked only if a login happened in this browser (see studentApi.ts).
+      const session = await checkSession();
 
-        // Get current user details
-        const user = await getCurrentUser();
-        console.log("StudentAuth - User fetched:", user);
-
-        if (user) {
-          console.log("StudentAuth - User authenticated");
-          setCurrentUser(user);
-          setIsStudentAuth(true);
-        } else {
-          console.log("StudentAuth - No user data available");
-          setCurrentUser(null);
-          setIsStudentAuth(false);
-        }
-      } catch (error) {
-        console.error("StudentAuth - Failed to verify session:", error);
+      if (session.loggedIn && session.isStudent) {
+        setCurrentUser(session.user ?? null);
+        setIsStudentAuth(true);
+      } else {
         setCurrentUser(null);
         setIsStudentAuth(false);
-      } finally {
-        setIsLoading(false);
       }
-    };
-
-    verifySession();
+    } catch (error) {
+      console.error('StudentAuth - Failed to verify session:', error);
+      setCurrentUser(null);
+      setIsStudentAuth(false);
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
 
+  // Check student session on mount
+  useEffect(() => {
+    refreshSession();
+  }, [refreshSession]);
+
   // Context value with memoization to prevent unnecessary re-renders
-  const value = useMemo(() => ({
-    isStudentAuthenticated: () => isAuthenticated() && isStudentAuth,
-    currentUser,
-    isLoading,
-    isStudentAuth
-  }), [currentUser, isLoading, isStudentAuth]);
+  const value = useMemo(
+    () => ({
+      isStudentAuthenticated: () => isAuthenticated() && isStudentAuth,
+      currentUser,
+      isLoading,
+      isStudentAuth,
+      refreshSession, // CHANGED: new
+    }),
+    [currentUser, isLoading, isStudentAuth, refreshSession]
+  );
 
   return (
     <StudentAuthContext.Provider value={value}>
@@ -68,7 +73,8 @@ export const StudentAuthProvider = ({ children }) => {
 // Custom hook to use the Student Auth Context
 export const useStudentAuth = () => {
   const context = useContext(StudentAuthContext);
-  if (context === undefined) {
+  // CHANGED: the context starts as null, so the old `=== undefined` check never fired.
+  if (context === null) {
     throw new Error('useStudentAuth must be used within a StudentAuthProvider');
   }
   return context;
@@ -77,17 +83,24 @@ export const useStudentAuth = () => {
 // Student-specific auth component
 export const RequireStudentAuth = ({ children }) => {
   const location = useLocation();
-  const { isStudentAuth, isLoading, currentUser } = useStudentAuth();
+  const { isStudentAuth, isLoading, refreshSession } = useStudentAuth();
+  const triedRef = useRef(false);
 
-  console.log('RequireStudentAuth - Auth check:', { 
-    isLoading, 
-    isStudentAuth, 
-    currentUser,
-    isAuthenticated: isAuthenticated()
-  });
+  // CHANGED: the old version only looked at the stored "logged in" hint, so an expired session
+  // still showed the page until an API call failed. Now the server's answer decides.
+  // The provider checked the session when the app loaded, which may be BEFORE this student
+  // logged in. If a login has happened since (the hint is set) but the provider hasn't seen it,
+  // ask for one fresh check, once.
+  const needsCheck = isAuthenticated() && !isStudentAuth && !isLoading;
 
-  if (isLoading) {
-    console.log('RequireStudentAuth - Still loading...');
+  useEffect(() => {
+    if (needsCheck && !triedRef.current) {
+      triedRef.current = true;
+      refreshSession();
+    }
+  }, [needsCheck, refreshSession]);
+
+  if (isLoading || (needsCheck && !triedRef.current)) {
     return (
       <div className="flex justify-center items-center h-screen">
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
@@ -95,15 +108,11 @@ export const RequireStudentAuth = ({ children }) => {
     );
   }
 
-  // Check if user is not authenticated at all
-  if (!isAuthenticated()) {
-    console.log('RequireStudentAuth - User not logged in. Redirecting to login.');
+  // Not a verified student, or logged out since (the hint is cleared on logout).
+  if (!isStudentAuth || !isAuthenticated()) {
     return <Navigate to="/" state={{ from: location }} replace />;
   }
 
- 
-
-  console.log('RequireStudentAuth - User is authenticated, rendering children');
   return children;
 };
 

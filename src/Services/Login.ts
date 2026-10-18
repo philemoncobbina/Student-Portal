@@ -1,27 +1,46 @@
+// Login.ts (regular and Google sign-in)
+
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { useGoogleLogin } from '@react-oauth/google';
+import { API_URL } from './http';
 
-// Base URL for all API requests
-const API_BASE_URL = 'https://api.cobbina.uk/api/api/api';
+// Endpoint paths, relative to API_URL. They must match the URL names in authapp/urls.py
+// (session-check/ lives in the admin_auth app but accepts any logged-in user).
+// CHANGED: logout is now 'logout/' (the old 'logout-auth/' is not in authapp/urls.py).
+const ENDPOINTS = {
+  login: 'login/',
+  googleSignIn: 'google-signin/',
+  sessionCheck: 'session-check/',
+  logout: 'logout/',
+} as const;
 
+const endpoint = (path: string) => `${API_URL}${path}`;
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+interface AuthUser {
+  id: number;
+  email: string;
+  role?: string;
+  first_name?: string;
+  last_name?: string;
+}
+
+// While the backend still has AUTH_RETURN_TOKENS_IN_BODY=True the tokens also appear in the
+// response body. They are ignored: the HttpOnly cookies are the credentials.
 interface LoginResponse {
-  access_token: string;
-  refresh_token: string;
-  user: {
-    id: number;
-    email: string;
-    first_name: string;
-    last_name: string;
-  };
+  user: AuthUser;
+  access_token?: string;
+  refresh_token?: string;
 }
 
 interface GoogleLoginResponse {
   success: boolean;
   email: string;
   created: boolean;
-  access: string;
-  refresh?: string;
   first_name?: string;
   last_name?: string;
   error?: string;
@@ -30,242 +49,129 @@ interface GoogleLoginResponse {
 interface LoginResult {
   success: boolean;
   error?: string;
-  user?: LoginResponse['user'] | { email: string; first_name?: string; last_name?: string };
+  user?: AuthUser;
 }
+
+interface SessionCheckResponse {
+  authenticated: boolean;
+  user: AuthUser;
+}
+
+// ---------------------------------------------------------------------------
+// Client-side state: a UI hint only. The cookies are the real credentials.
+// ---------------------------------------------------------------------------
+
+const USER_KEY = 'user_data';
+const AUTH_METHOD_KEY = 'auth_method';
+const LEGACY_KEYS = ['access_token', 'refresh_token']; // from the old token-in-localStorage version
+
+const readStoredUser = (): AuthUser | null => {
+  try {
+    const raw = localStorage.getItem(USER_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+};
+
+const storeUser = (user: AuthUser, method: 'regular' | 'google'): void => {
+  localStorage.setItem(USER_KEY, JSON.stringify(user));
+  localStorage.setItem(AUTH_METHOD_KEY, method);
+  LEGACY_KEYS.forEach((k) => localStorage.removeItem(k));
+};
+
+const clearLocalSession = (): void => {
+  localStorage.removeItem(USER_KEY);
+  localStorage.removeItem(AUTH_METHOD_KEY);
+  LEGACY_KEYS.forEach((k) => localStorage.removeItem(k));
+};
+
+/** For code that ends the session itself, for example after a password change. */
+export const endLocalSession = clearLocalSession;
+
+/** @deprecated Cookies carry the credentials now. Kept so existing `headers: getAuthHeaders()` calls still work. */
+export const getAuthHeaders = (): Record<string, string> => ({});
+
+export const getCurrentUser = (): AuthUser | null => readStoredUser();
+
+// ---------------------------------------------------------------------------
+// Login
+// ---------------------------------------------------------------------------
 
 export const login = async (email: string, password: string): Promise<LoginResult> => {
   try {
-    const response = await axios.post<LoginResponse>(`${API_BASE_URL}/login/`, { email, password });
-    const { access_token, refresh_token, user } = response.data;
+    const { data } = await axios.post<LoginResponse>(endpoint(ENDPOINTS.login), {
+      email,
+      password,
+    });
 
-    // Store tokens
-    localStorage.setItem('access_token', access_token);
-    localStorage.setItem('refresh_token', refresh_token);
-    
-    // Store user data
-    localStorage.setItem('user_data', JSON.stringify(user));
-    localStorage.setItem('auth_method', 'regular');
-
-    console.log('Regular login successful, tokens stored');
-
-    return { success: true, user };
+    storeUser(data.user, 'regular');
+    return { success: true, user: data.user };
   } catch (error: any) {
-    console.error('Regular login error:', error);
-    let errorMessage = 'An unknown error occurred';
-    if (error.response && error.response.data) {
-      errorMessage = error.response.data.error || error.response.data.message || 'Login failed';
-    }
+    const errorMessage = error.response
+      ? error.response.data?.error || error.response.data?.message || 'Login failed'
+      : 'Unable to reach the server. Check your connection.';
 
     return { success: false, error: errorMessage };
   }
 };
 
+// ---------------------------------------------------------------------------
+// Google Sign-In
+// ---------------------------------------------------------------------------
+
 export const googleSignIn = async (access_token: string): Promise<LoginResult> => {
   try {
-    console.log('Attempting Google Sign-In with token:', access_token);
+    const { data } = await axios.post<GoogleLoginResponse>(endpoint(ENDPOINTS.googleSignIn), {
+      access_token,
+    });
 
-    const serverResponse = await axios.post<GoogleLoginResponse>(
-      `${API_BASE_URL}/google-signin/`,
-      { access_token: access_token },
-      {
-        headers: {
-          'Content-Type': 'application/json',
-        }
-      }
-    );
-
-    console.log('Google Sign-In Server Response:', serverResponse.data);
-
-    const { 
-      access: serverAccessToken, 
-      refresh: serverRefreshToken,
-      email, 
-      success, 
-      error,
-      first_name,
-      last_name 
-    } = serverResponse.data;
-
-    if (!success) {
-      return { 
-        success: false, 
-        error: error || 'Google Sign-In failed' 
-      };
+    if (!data.success) {
+      return { success: false, error: data.error || 'Google Sign-In failed' };
     }
 
-    // Validation checks for tokens
-    if (!serverAccessToken) {
-      console.error('Missing access token in the response');
-      return { 
-        success: false, 
-        error: 'Invalid tokens received from server' 
-      };
-    }
+    // The Google response has no id or role, so read the real user from the new session.
+    // This also proves the cookies were actually stored before we say "signed in".
+    let user: AuthUser = {
+      id: 0,
+      email: data.email,
+      first_name: data.first_name,
+      last_name: data.last_name,
+    };
 
-    // Store tokens in localStorage
     try {
-      localStorage.setItem('access_token', serverAccessToken);
-      
-      // Store refresh token if provided, otherwise use a placeholder
-      if (serverRefreshToken) {
-        localStorage.setItem('refresh_token', serverRefreshToken);
-      } else {
-        localStorage.setItem('refresh_token', 'google_refresh_placeholder');
-      }
-      
-      // Store user data
-      const userData = {
-        email: email,
-        first_name: first_name || '',
-        last_name: last_name || '',
-        id: 0 // Placeholder for Google users
-      };
-      localStorage.setItem('user_data', JSON.stringify(userData));
-      localStorage.setItem('auth_method', 'google');
-
-      console.log('Google tokens and user data successfully stored');
-    } catch (storageError) {
-      console.error('Failed to store tokens in localStorage:', storageError);
-      return { 
-        success: false, 
-        error: 'Unable to store authentication tokens' 
+      const { data: check } = await axios.get<SessionCheckResponse>(
+        endpoint(ENDPOINTS.sessionCheck),
+        { skipAuthRedirect: true }
+      );
+      if (!check.authenticated) throw new Error('No session');
+      user = { ...user, ...check.user };
+    } catch {
+      clearLocalSession();
+      return {
+        success: false,
+        error:
+          'Signed in with Google, but the session could not be started. ' +
+          'Please make sure cookies are enabled and try again.',
       };
     }
 
-    return { 
-      success: true, 
-      user: { 
-        email: email,
-        first_name: first_name,
-        last_name: last_name
-      } 
-    };
+    storeUser(user, 'google');
+    return { success: true, user };
   } catch (error: any) {
-    console.error(
-      'Google Sign-In Error:',
-      'Full Error:', error,
-      'Response Data:', error.response?.data,
-      'Response Status:', error.response?.status
-    );
-
-    return { 
-      success: false, 
-      error: error.response?.data?.error || 'Google Sign-In failed. Please try again.' 
+    return {
+      success: false,
+      error: error.response
+        ? error.response.data?.error || 'Google Sign-In failed. Please try again.'
+        : 'Unable to reach the server. Check your connection.',
     };
   }
 };
 
-export const logout = async (navigate: ReturnType<typeof useNavigate>): Promise<void> => {
-  try {
-    const headers = getAuthHeaders();
-    await axios.post(`${API_BASE_URL}/logout-auth/`, {}, { headers });
-  } catch (error: any) {
-    console.error('Logout API call failed:', error.response?.data || error.message);
-  } finally {
-    // Always clear local storage regardless of API call success
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('refresh_token');
-    localStorage.removeItem('user_data');
-    localStorage.removeItem('auth_method');
-    
-    navigate('/');
-  }
-};
-
-export const isLoggedIn = async (): Promise<{ loggedIn: boolean; user?: { id: number; email: string; role?: string } }> => {
-  try {
-    // First check if we have tokens in localStorage
-    const accessToken = localStorage.getItem('access_token');
-    const refreshToken = localStorage.getItem('refresh_token');
-    
-    if (!accessToken) {
-      console.log('No access token found');
-      return { loggedIn: false };
-    }
-
-    // For Google users, we might not have a refresh token or it might be a placeholder
-    const authMethod = localStorage.getItem('auth_method');
-    if (authMethod === 'google' && (!refreshToken || refreshToken === 'google_refresh_placeholder')) {
-      // For Google users, just check if we have user data and access token
-      const userData = localStorage.getItem('user_data');
-      if (userData) {
-        const user = JSON.parse(userData);
-        console.log('Google user found in localStorage');
-        return { loggedIn: true, user };
-      }
-    }
-
-    // For regular users or when we want to verify with server
-    const headers = getAuthHeaders();
-    const response = await axios.get(`${API_BASE_URL}/session-check/`, { headers });
-
-    const { authenticated, user } = response.data;
-    if (authenticated) {
-      console.log('Session check successful');
-      return { loggedIn: true, user };
-    }
-  } catch (error: any) {
-    console.error('Session check failed:', error.response?.data || error.message);
-    
-    // If API call fails but we have valid tokens, still consider logged in
-    const accessToken = localStorage.getItem('access_token');
-    const userData = localStorage.getItem('user_data');
-    
-    if (accessToken && userData) {
-      try {
-        const user = JSON.parse(userData);
-        console.log('Using cached user data due to API failure');
-        return { loggedIn: true, user };
-      } catch (parseError) {
-        console.error('Failed to parse cached user data');
-      }
-    }
-  }
-
-  return { loggedIn: false };
-};
-
-// Simple synchronous check for immediate use
-export const isAuthenticated = (): boolean => {
-  const accessToken = localStorage.getItem('access_token');
-  const userData = localStorage.getItem('user_data');
-  
-  const isAuth = !!(accessToken && userData);
-  console.log('isAuthenticated check:', isAuth, { 
-    hasToken: !!accessToken, 
-    hasUserData: !!userData 
-  });
-  
-  return isAuth;
-};
-
-export const getCurrentUser = () => {
-  try {
-    const userData = localStorage.getItem('user_data');
-    return userData ? JSON.parse(userData) : null;
-  } catch (error) {
-    console.error('Failed to get current user:', error);
-    return null;
-  }
-};
-
-export const getAuthHeaders = (): { Authorization: string } => {
-  const accessToken = localStorage.getItem('access_token');
-  return { Authorization: `Bearer ${accessToken}` };
-};
-
-export const fetchData = async (url: string) => {
-  try {
-    const headers = getAuthHeaders();
-    const response = await axios.get(url, { headers });
-    return response.data;
-  } catch (error: any) {
-    console.error('Failed to fetch data:', error.response?.data || error.message);
-    throw error;
-  }
-};
-
-export const useGoogleSignInHandler = (onSuccess: () => void, onError: (error: string) => void) => {
+export const useGoogleSignInHandler = (
+  onSuccess: () => void,
+  onError: (error: string) => void
+) => {
   return useGoogleLogin({
     onSuccess: async (codeResponse) => {
       if (!codeResponse.access_token) {
@@ -275,22 +181,93 @@ export const useGoogleSignInHandler = (onSuccess: () => void, onError: (error: s
 
       try {
         const result = await googleSignIn(codeResponse.access_token);
+
         if (result.success) {
-          // Small delay to ensure localStorage is updated
-          setTimeout(() => {
-            onSuccess();
-          }, 100);
+          setTimeout(onSuccess, 100);
         } else {
           onError(result.error || 'Google Sign-In failed');
         }
-      } catch (error) {
-        console.error('Google sign-in handler error:', error);
+      } catch {
         onError('An unexpected error occurred');
       }
     },
-    onError: (error) => {
-      console.error('Google Login Error:', error);
+    onError: () => {
       onError('Google Sign-In error. Please try again.');
     },
   });
+};
+
+// ---------------------------------------------------------------------------
+// Session check
+// ---------------------------------------------------------------------------
+
+export const isLoggedIn = async (): Promise<{ loggedIn: boolean; user?: AuthUser }> => {
+  // Visitors who never logged in cost no requests at all.
+  const stored = readStoredUser();
+  if (!stored) {
+    return { loggedIn: false };
+  }
+
+  try {
+    // A 401 here triggers one silent refresh (see http.ts) before this call gives up.
+    const { data } = await axios.get<SessionCheckResponse>(endpoint(ENDPOINTS.sessionCheck), {
+      skipAuthRedirect: true,
+    });
+
+    if (data.authenticated) {
+      // session-check returns id, email and role; keep the names we already have for the same account.
+      const sameAccount = !stored.id || stored.id === data.user.id;
+      const user: AuthUser = { ...(sameAccount ? stored : {}), ...data.user };
+
+      localStorage.setItem(USER_KEY, JSON.stringify(user));
+      return { loggedIn: true, user };
+    }
+  } catch (error: any) {
+    if (axios.isAxiosError(error) && !error.response) {
+      // Server unreachable: keep showing the cached user. API calls will still fail.
+      console.warn('Offline fallback: using cached user data');
+      return { loggedIn: true, user: stored };
+    }
+
+    if (axios.isAxiosError(error) && [401, 403].includes(error.response?.status ?? 0)) {
+      clearLocalSession();
+    } else {
+      console.error('Session validation failed:', error.response?.data || error.message);
+    }
+  }
+
+  return { loggedIn: false };
+};
+
+/** Synchronous UI hint. Use isLoggedIn() when the answer matters. */
+export const isAuthenticated = (): boolean => !!readStoredUser();
+
+// ---------------------------------------------------------------------------
+// Logout
+// ---------------------------------------------------------------------------
+
+export const logout = async (navigate: ReturnType<typeof useNavigate>): Promise<void> => {
+  try {
+    await axios.post(endpoint(ENDPOINTS.logout), {}, { skipAuthRedirect: true });
+  } catch (error: any) {
+    console.error('Logout API call failed:', error.response?.data || error.message);
+  } finally {
+    clearLocalSession();
+    navigate('/');
+  }
+};
+
+// ---------------------------------------------------------------------------
+// Generic authenticated fetch helper
+// ---------------------------------------------------------------------------
+
+/** The URL must start with API_URL, or the cookie and CSRF header are not attached. */
+export const fetchData = async (url: string) => {
+  try {
+    const response = await axios.get(url);
+    return response.data;
+  } catch (error: any) {
+    console.error('Failed to fetch data:', error.response?.data || error.message);
+    throw error;
+  }
 };
